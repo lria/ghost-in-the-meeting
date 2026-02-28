@@ -1,0 +1,57 @@
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# --- Env / Secrets ---
+.env
+.env.*
+!.env.example
+**/*.pem
+**/*.key
+**/*.p12
+**/id_rsa
+**/id_rsa.pub
+**/id_ed25519
+**/id_ed25519.pub
+**/*_rsa
+**/*_ed25519
+
+# --- Docker / Runtime state (DO NOT COMMIT) ---
+# n8n runtime
+n8n_data/
+# database / queues / vector db / object storage volumes
+postgres_data/
+redis_data/
+qdrant_data/
+minio_data/
+ollama_data/
+data/uploads/
+data/nemo/
+# model / HF / whisper caches
+hf_cache/
+whisper_cache/
+data/whisper_models/
+data/nltk_data/
+
+# --- Logs / crash files ---
+**/*.log
+**/*.journal
+**/crash.*
+**/postmaster.pid
+
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Node ---
+node_modules/
+
+# --- Backups & local exports ---
+Backup/
+*.bak
+*.tmp

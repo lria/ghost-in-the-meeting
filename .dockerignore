@@ -1,0 +1,11 @@
+# ignora tutto
+**
+
+# includi solo i file necessari alla build
+!Dockerfile.whisperx
+!docker-compose.yml
+!.dockerignore
+!async_routes.py
+!entry_async.py
+!main.py
+!nemo/*

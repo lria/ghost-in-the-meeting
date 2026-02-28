@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>N8N Minute – Webform</title>
+  <style>
+    :root { --w: 820px; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:24px;max-width:var(--w)}
+    h2{margin:0 0 10px}
+    .card{border:1px solid #ddd;border-radius:12px;padding:16px}
+    label{display:block;margin:12px 0 6px;font-weight:600}
+    input,select,textarea{width:100%;padding:10px;border:1px solid #ccc;border-radius:10px}
+    textarea{resize:vertical}
+    button{padding:12px 16px;margin-top:14px;border:0;border-radius:12px;cursor:pointer}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .hint{color:#555;font-size:13px;margin-top:6px}
+    .small{font-size:12px;color:#666}
+    pre{white-space:pre-wrap;background:#0b1020;color:#e8ebff;padding:12px;border-radius:12px;overflow:auto}
+    .ok{color:#1a7f37}
+    .err{color:#b42318}
+  </style>
+</head>
+<body>
+  <h2>N8N Minute – Ingest</h2>
+  <div class="card">
+    <div class="small">
+      Compila i metadati, carica un audio, e invia al workflow n8n (Webhook).
+    </div>
+
+    <form id="f" enctype="multipart/form-data" method="post">
+      <label>Cliente</label>
+      <input name="customer" required placeholder="Es. Alpitour" />
+
+      <label>Progetto</label>
+      <input name="project" required placeholder="Es. AI Platform" />
+
+      <label>Partecipanti</label>
+      <textarea name="participants" rows="5" placeholder="Uno per riga (o separati da ;)"></textarea>
+      <div class="hint">Esempio: Daniela Demichelis - IT; Luigi Ria - Kiratech</div>
+
+      <div class="row">
+        <div>
+          <label>Lingua</label>
+          <select name="language">
+            <option value="it" selected>it</option>
+            <option value="en">en</option>
+          </select>
+        </div>
+        <div>
+          <label>Modello Ollama</label>
+          <input name="ollama_model" placeholder="Es. llama3.1:8b-instruct" />
+          <div class="hint">Lascia vuoto se il workflow usa un default.</div>
+        </div>
+      </div>
+
+      <label>File audio</label>
+      <input name="file" type="file" accept="audio/*,video/*" required />
+      <div class="hint">Supporta anche video: il workflow potrà estrarre audio lato backend.</div>
+
+      <button type="submit">Invia</button>
+    </form>
+
+    <div style="margin-top:14px" class="small">
+      Endpoint configurato: <code id="wh"></code>
+    </div>
+    <pre id="out" style="margin-top:12px">Pronto.</pre>
+  </div>
+
+  <script>
+    // ✅ Imposta qui l'URL del Webhook n8n (POST). Esempi:
+    // - Diretto:   http://localhost:5678/webhook/minute/ingest
+    // - Reverse:   http://localhost:8080/webhook/minute/ingest
+    const WEBHOOK_URL = "http://localhost:5678/webhook-test/audio_minute";
+
+    const form = document.getElementById('f');
+    const out = document.getElementById('out');
+    const wh = document.getElementById('wh');
+    wh.textContent = WEBHOOK_URL;
+
+    function show(text, ok=true){
+      out.className = ok ? "ok" : "err";
+      out.textContent = text;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      show("Invio in corso...");
+
+      const fd = new FormData(form);
+
+      try {
+        const r = await fetch(WEBHOOK_URL, { method: "POST", body: fd });
+        const ct = r.headers.get("content-type") || "";
+        const body = ct.includes("application/json") ? JSON.stringify(await r.json(), null, 2) : await r.text();
+        show(`Risposta (${r.status}):\n${body}`, r.ok);
+      } catch (err) {
+        show(`Errore: ${err}`, false);
+      }
+    });
+  </script>
+</body>
+</html>
