@@ -1,6 +1,6 @@
 # 👻 Ghost in the Meeting
 
-An self-hosted, async pipeline for transcribing and diarizing meeting audio, built on Apple Silicon (M3 Pro) with Docker.
+A self-hosted, async pipeline for transcribing and diarizing meeting audio, built on Apple Silicon (M3 Pro) with Docker.
 
 Transcribes audio in Italian and English, identifies speakers, and produces structured output ready for minute generation via RAG + LLM.
 
@@ -40,6 +40,9 @@ whisperx_worker
     ├── pyannote        → speaker diarization (optional)
     ├── merge           → assign speaker label to each segment
     └── MinIO upload    → result.json and/or result.txt
+
+whisperx_cleanup       (runs every hour)
+    └── deletes local temp files for COMPLETED/FAILED jobs
 ```
 
 ---
@@ -70,7 +73,7 @@ POSTGRES_USER=n8n
 POSTGRES_PASSWORD=your_password
 POSTGRES_DB=n8n
 
-MINIO_ROOT_USER=admin
+MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=your_password
 
 N8N_BASIC_AUTH_USER=admin
@@ -86,7 +89,15 @@ TZ=Europe/Rome
 docker compose up -d
 ```
 
-**4. First run — build takes ~10 minutes** (downloads PyTorch + pyannote models)
+**4. Make MinIO bucket publicly readable**
+```bash
+docker exec n8n_stack_minio sh -c '
+  mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD &&
+  mc anonymous set download local/wx-transcriptions
+'
+```
+
+**5. First run** — build takes ~10 minutes (downloads PyTorch + pyannote models)
 
 ---
 
@@ -95,6 +106,8 @@ docker compose up -d
 Base URL: `http://localhost:9200`
 
 ### `POST /jobs` — Submit a transcription job
+
+All parameters are `Form` fields (multipart body).
 
 ```bash
 curl -X POST http://localhost:9200/jobs \
@@ -137,22 +150,21 @@ curl -X POST http://localhost:9200/jobs \
 curl http://localhost:9200/jobs/d87b69740f634fd28ad1d5dda935e963
 ```
 
-**Response while processing:**
+**While processing:**
 ```json
 {
-  "job_id": "d87b69740f634fd28ad1d5dda935e963",
   "status": "WORKING",
   "step": "DIARIZING_EMBEDDINGS_42pct"
 }
 ```
 
-**Response when completed:**
+**When completed:**
 ```json
 {
-  "job_id": "d87b69740f634fd28ad1d5dda935e963",
   "status": "COMPLETED",
-  "output_json_url": "http://localhost:9000/wx-transcriptions/Acme/Q1Review/.../result.json",
-  "output_txt_url":  "http://localhost:9000/wx-transcriptions/Acme/Q1Review/.../result.txt",
+  "output_json_url": "http://localhost:9000/wx-transcriptions/Acme/Q1Review/20260307_173045_d87b6974/result.json",
+  "output_txt_url":  "http://localhost:9000/wx-transcriptions/Acme/Q1Review/20260307_173045_d87b6974/result.txt",
+  "output_format": "both",
   "finished_at": "2026-03-07T17:30:00Z"
 }
 ```
@@ -195,7 +207,7 @@ curl http://localhost:9200/health
 ## Output formats
 
 ### JSON (`result.json`)
-Full structured output with word-level timestamps and speaker labels per segment.
+Structured output with word-level timestamps and speaker labels per segment.
 
 ```json
 {
@@ -218,7 +230,8 @@ Full structured output with word-level timestamps and speaker labels per segment
 ```
 
 ### TXT (`result.txt`)
-Human-readable transcript grouped by speaker turn.
+Human-readable transcript grouped by speaker turn, with timestamps.
+When diarization is disabled, blocks are split on silence gaps > 2 seconds.
 
 ```
 RIUNIONE:  Acme / Q1Review
@@ -242,6 +255,21 @@ Buongiorno a tutti, iniziamo la riunione. Grazie. Come dicevo...
 
 ---
 
+## Cleanup worker
+
+The `whisperx_cleanup` service runs periodically and deletes temporary files
+on disk (input audio + local output) for jobs already uploaded to MinIO.
+
+- **`WORKING` / `PENDING` jobs are never touched**, regardless of age
+- Configurable via environment variables in `docker-compose.yml`:
+
+| Variable | Default | Description |
+|---|---|---|
+| `WX_CLEANUP_INTERVAL_SEC` | `3600` | How often cleanup runs (seconds) |
+| `WX_CLEANUP_MIN_AGE_SEC` | `300` | Minimum job age before files are deleted |
+
+---
+
 ## Performance (Apple M3 Pro, CPU only)
 
 | Audio duration | Transcription | Diarization | Total |
@@ -250,7 +278,7 @@ Buongiorno a tutti, iniziamo la riunione. Grazie. Come dicevo...
 
 - Model: `small`, compute type: `int8`
 - Docker Desktop: 12 CPUs, 16 GB RAM
-- GPU access not available inside Docker on macOS (Hypervisor limitation)
+- GPU/Neural Engine not available inside Docker on macOS (Hypervisor limitation)
 
 ---
 
@@ -260,20 +288,20 @@ Buongiorno a tutti, iniziamo la riunione. Grazie. Come dicevo...
 # View worker logs in real-time
 docker logs n8n_whisperx_worker --follow
 
-# Check Redis queue
+# Check Redis queue length
 docker exec n8n_stack_redis redis-cli LLEN wx:queue
 
 # Inspect a job on Redis
 docker exec n8n_stack_redis redis-cli HGETALL wx:job:JOB_ID
 
+# List all files in MinIO bucket
+docker exec n8n_stack_minio sh -c '
+  mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD > /dev/null &&
+  mc ls --recursive local/wx-transcriptions
+'
+
 # Reset all test data (Redis + PostgreSQL + MinIO + disk)
 ./reset.sh
-
-# Access MinIO console
-open http://localhost:9001
-
-# Access n8n
-open http://localhost:5678
 ```
 
 ---
@@ -297,6 +325,8 @@ open http://localhost:5678
 - [x] Speaker diarization with real-time progress
 - [x] Dual output format (JSON + TXT)
 - [x] Job queue with stale recovery
+- [x] Cleanup worker for temporary files
+- [x] Human-readable MinIO folder naming
 - [ ] Speaker rename (participants → SPEAKER_00 mapping)
 - [ ] RAG indexing of transcripts into Qdrant
 - [ ] Minute generation via Ollama

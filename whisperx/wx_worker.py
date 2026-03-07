@@ -10,9 +10,14 @@ Dipendenze chiave (senza whisperX):
 
 import os
 import json
+import warnings
 import subprocess
 from pathlib import Path
 from datetime import datetime, timezone
+
+# Sopprimi warning deprecazione da transformers e onnxruntime
+warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
+warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
 
 import redis
 import boto3
@@ -251,21 +256,21 @@ def run_job(job_id: str, fw_model, diar_pipeline):
     if diarize == "true" and diar_pipeline is not None:
         update_job(job_id, step="DIARIZING")
         try:
-            from pyannote.audio.pipelines.utils.hook import Hook
+            from pyannote.audio.pipelines.utils.hook import Hooks
 
-            def _progress(step_name, completed, total, **kwargs):
-                """Hook che aggiorna Redis e stampa in real-time ad ogni step pyannote."""
-                if total and total > 0:
+            def _progress(step_name, step_artifact, file=None, total=None, completed=None):
+                """Hook real-time: stampa progresso e aggiorna Redis ad ogni step pyannote."""
+                if total and completed is not None and total > 0:
                     pct = int(completed / total * 100)
-                    step_label = f"DIARIZING_{step_name.upper()}_{pct}pct"
                     print(f"[worker] diarizzazione {step_name}: {pct}%", flush=True)
-                    update_job(job_id, step=step_label)
+                    update_job(job_id, step=f"DIARIZING_{step_name.upper()}_{pct}pct")
 
-            diarization = diar_pipeline(
-                str(wav_path),
-                max_speakers=max_spk,
-                hook=Hook(_progress),
-            )
+            with Hooks(_progress) as hook:
+                diarization = diar_pipeline(
+                    str(wav_path),
+                    max_speakers=max_spk,
+                    hook=hook,
+                )
             segments = merge_transcript_diarization(segments, diarization)
             print(f"[worker] diarizzazione completata", flush=True)
         except Exception as e:
@@ -289,6 +294,10 @@ def run_job(job_id: str, fw_model, diar_pipeline):
     s3 = s3_client()
     ensure_bucket(s3, MINIO_BUCKET)
 
+    # Cartella MinIO: customer/project/YYYYMMDD_HHMMSS_{job_id[:8]}/
+    ts           = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    minio_folder = f"{ts}_{job_id[:8]}"
+
     # ── JSON ─────────────────────────────────────────────────────────────────
     if output_format in ("json", "both"):
         output = {
@@ -305,7 +314,7 @@ def run_job(job_id: str, fw_model, diar_pipeline):
         result_path.write_text(
             json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        minio_key = f"{customer}/{project}/{job_id}/result.json"
+        minio_key = f"{customer}/{project}/{minio_folder}/result.json"
         try:
             update_job(job_id, step="UPLOADING_JSON")
             s3.upload_file(str(result_path), MINIO_BUCKET, minio_key,
@@ -327,19 +336,30 @@ def run_job(job_id: str, fw_model, diar_pipeline):
             "─" * 60,
         ]
         current_speaker = None
+        prev_end        = 0.0
+        GAP_SEC         = 2.0  # nuovo blocco se gap > 2 sec (anche stesso speaker)
+
         for seg in segments:
-            spk  = seg.get("speaker", "UNKNOWN")
-            text = seg.get("text", "").strip()
+            spk   = seg.get("speaker", "UNKNOWN")
+            text  = seg.get("text", "").strip()
+            start = seg.get("start", 0.0)
             if not text:
+                prev_end = seg.get("end", prev_end)
                 continue
-            # Nuova riga speaker solo quando cambia
-            if spk != current_speaker:
+
+            gap         = start - prev_end
+            spk_changed = spk != current_speaker
+            new_block   = spk_changed or gap > GAP_SEC
+
+            if new_block:
                 txt_lines.append("")
-                mm = int(seg["start"] // 60)
-                ss = int(seg["start"] % 60)
+                mm = int(start // 60)
+                ss = int(start % 60)
                 txt_lines.append(f"[{mm:02d}:{ss:02d}] {spk}")
                 current_speaker = spk
+
             txt_lines.append(text)
+            prev_end = seg.get("end", start)
 
         txt_lines += [
             "",
@@ -353,7 +373,7 @@ def run_job(job_id: str, fw_model, diar_pipeline):
         txt_path    = job_out_dir / "result.txt"
         txt_path.write_text(txt_content, encoding="utf-8")
 
-        minio_txt_key = f"{customer}/{project}/{job_id}/result.txt"
+        minio_txt_key = f"{customer}/{project}/{minio_folder}/result.txt"
         try:
             update_job(job_id, step="UPLOADING_TXT")
             s3.upload_file(str(txt_path), MINIO_BUCKET, minio_txt_key,

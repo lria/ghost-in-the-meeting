@@ -1,111 +1,122 @@
-## Audio Transcription Pipeline — Refactor & Improvements
+## Audio Transcription Pipeline — Fixes & New Services
 
-### Architecture
+### Bug fixes
 
-- **Removed WhisperX dependency** entirely. The project is no longer maintained and
-  caused recurring incompatibilities with `faster-whisper >= 1.0.3` and `pyannote >= 3.2`.
-  The transcription + diarization pipeline is now built directly on:
-  - `faster-whisper 1.0.0` — transcription engine (actively maintained by SYSTRAN)
-  - `pyannote.audio 3.3.2` — speaker diarization (actively maintained)
-  - `ctranslate2 4.3.1` — inference backend, pinned for ARM64 stability
+#### Diarization hook — `wx_worker.py`
+The pyannote `Hooks` class requires each hook to be called as a context manager (`with` statement)
+and expects a specific callback signature:
 
-- **Docker platform changed** from `linux/amd64` (Rosetta emulation) to `linux/arm64`
-  (native Apple Silicon). This resolves the `cannot enable executable stack` crash
-  in ctranslate2 4.x under Rosetta and improves overall performance.
-
----
-
-### API — `wx_api.py`
-
-#### `POST /jobs` — Submit transcription job
-All parameters are now `Form` fields (multipart body). Previously a mix of `Form` and `Query`.
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `file` | File | required | Audio file (any format supported by ffmpeg) |
-| `customer` | str | required | Customer name, used as MinIO namespace |
-| `project` | str | required | Project name, used as MinIO namespace |
-| `language` | str | `it` | Language code: `it`, `en`, `auto` |
-| `max_speakers` | int | `8` | Maximum number of speakers (1–20) |
-| `diarize` | bool | `true` | Enable speaker diarization via pyannote |
-| `output_format` | str | `both` | Output format: `json` \| `txt` \| `both` |
-| `participants` | str | `""` | Optional participant list (for future speaker rename) |
-
-#### `GET /jobs/{job_id}` — Poll job status
-Response now includes:
-- `output_json_url` — MinIO URL of `result.json` (when `output_format` is `json` or `both`)
-- `output_txt_url` — MinIO URL of `result.txt` (when `output_format` is `txt` or `both`)
-- `output_format` — format requested at submission
-- `step` — current processing step, updated in real-time during diarization
-
-#### `GET /queue-stats` — Queue snapshot _(new)_
-Returns a full snapshot of the Redis queue state:
-- `queue_length` — number of jobs waiting
-- `queued_ids` — list of pending job IDs
-- `status_counts` — breakdown by status (PENDING, WORKING, COMPLETED, FAILED)
-- `stale_working` — jobs in WORKING state for more than 30 minutes (likely stuck)
-
----
-
-### Worker — `wx_worker.py`
-
-#### Transcription — `transcribe()`
-Replaced `whisperx.load_model()` + `whisperx.transcribe()` with direct `faster_whisper.WhisperModel`:
-- `word_timestamps=True` — word-level timestamps for accurate diarization merge
-- `vad_filter=True` — silence filtering to reduce hallucinations
-- `vad_parameters={"min_silence_duration_ms": 500}`
-
-#### Diarization progress hook _(new)_
-Real-time progress reporting during pyannote diarization via `pyannote.audio.pipelines.utils.hook.Hook`.
-Each internal step (`segmentation`, `embeddings`, `discrete_diarization`) now:
-- Prints progress percentage to Docker logs in real-time with `flush=True`
-- Updates the Redis `step` field so `GET /jobs/{job_id}` reflects live progress
-
-#### Output generation — dual format _(new)_
-The worker now generates output based on the `output_format` parameter:
-
-- **`json`** — structured `result.json` with full segment list, speaker labels, word timestamps
-- **`txt`** — human-readable `result.txt` with speaker turns, timestamps, and full transcript
-- **`both`** (default) — generates and uploads both files to MinIO
-
-TXT format example:
+```python
+def callback(step_name, step_artifact, file=None, total=None, completed=None)
 ```
-RIUNIONE:  Acme / Board
-DATA:      2026-03-07
-LINGUA:    it
-SPEAKER:   SPEAKER_00, SPEAKER_01
 
-────────────────────────────────────────────────────────────
-[00:00:05] SPEAKER_00
-Buongiorno a tutti...
+Three issues were causing silent diarization failures:
 
-[00:01:12] SPEAKER_01
-Grazie, come dicevo...
+- **Wrong import**: `Hook` does not exist in pyannote 3.3.2 — correct class is `Hooks` (plural)
+- **Wrong signature**: callback was declared as `(step_name, **kwargs)` or `(step_name, completed, total, **kwargs)`,
+  causing `TypeError: got multiple values for argument 'completed'`
+- **Missing context manager**: `Hooks` must be used with `with` — calling it directly as
+  `hook=Hooks(_progress)` skips `__enter__`/`__exit__` lifecycle
 
-────────────────────────────────────────────────────────────
+Fix:
+```python
+def _progress(step_name, step_artifact, file=None, total=None, completed=None):
+    if total and completed is not None and total > 0:
+        pct = int(completed / total * 100)
+        print(f"[worker] diarizzazione {step_name}: {pct}%", flush=True)
+        update_job(job_id, step=f"DIARIZING_{step_name.upper()}_{pct}pct")
 
-TESTO COMPLETO:
-Buongiorno a tutti... Grazie, come dicevo...
+with Hooks(_progress) as hook:
+    diarization = diar_pipeline(str(wav_path), max_speakers=max_spk, hook=hook)
 ```
 
 ---
 
-### Database — `001_create_transcription_runs.sql`
+### New features
 
-- **Unified** `001_create_transcription_runs.sql` and `002_create_wx_transcription_jobs.sql`
-  into a single idempotent file. The `002` file is now obsolete and should be removed.
-- **Column renamed**: `output_minio_url` → `output_json_url` in `wx_transcription_jobs`
-- **Enum updated**: `transcription_status` now includes all required values:
-  `CREATED`, `PENDING`, `WORKING`, `COMPLETED`, `FAILED`, `ERROR`
-- The `DO $$ ... IF NOT EXISTS` block now adds missing enum values to existing databases
-  without requiring a full reset.
+#### MinIO folder naming
+Output files are now stored under a human-readable timestamp folder instead of raw `job_id`:
+
+```
+# Before
+Acme/Board/de10e2332e0849139b1c9ef7bbc34a88/result.json
+
+# After
+Acme/Board/20260307_173045_de10e233/result.json
+```
+
+Format: `YYYYMMDD_HHMMSS_{job_id[:8]}`
+
+#### Dual output format — `output_format` parameter _(new)_
+`POST /jobs` now accepts an `output_format` form field:
+
+| Value | Output |
+|---|---|
+| `json` | `result.json` only |
+| `txt` | `result.txt` only |
+| `both` | both files (default) |
+
+#### TXT format with gap-based speaker blocks
+The human-readable TXT output now starts a new speaker block when:
+- The speaker label changes (diarization active), **or**
+- There is a silence gap > 2 seconds between segments (diarization disabled or unknown speaker)
+
+This ensures readable output even when diarization is skipped.
+
+#### All API parameters moved to `Form`
+All `POST /jobs` parameters are now `Form` fields (multipart body).
+Previously `customer`, `project`, `participants` were `Form` while others were `Query` params in the URL.
+
+| Parameter | Type | Default |
+|---|---|---|
+| `file` | File | required |
+| `customer` | str | required |
+| `project` | str | required |
+| `language` | str | `it` |
+| `max_speakers` | int | `8` |
+| `diarize` | bool | `true` |
+| `output_format` | str | `both` |
+| `participants` | str | `""` |
+
+#### `GET /jobs/{job_id}` response fields renamed
+- `output_minio_url` → `output_json_url`
+- Added `output_txt_url`
+- Added `output_format`
+
+#### Cleanup worker — `wx_cleanup.py` _(new)_
+A dedicated `whisperx_cleanup` service handles periodic deletion of temporary files
+on disk (input audio + local output) for jobs already uploaded to MinIO.
+
+Only terminal jobs (`COMPLETED` or `FAILED`) are eligible for cleanup.
+Active jobs (`WORKING`, `PENDING`) are always skipped regardless of age.
+
+Environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `WX_CLEANUP_INTERVAL_SEC` | `3600` | Cleanup cycle interval in seconds |
+| `WX_CLEANUP_MIN_AGE_SEC` | `300` | Minimum job age before cleanup (seconds) |
+
+#### MinIO bucket — public download
+Bucket `wx-transcriptions` is now set to anonymous `download` policy,
+allowing direct URL access without credentials.
+
+#### `reset.sh` _(new)_
+Script to wipe all test data: Redis jobs, PostgreSQL rows, MinIO bucket contents,
+and local audio files — without touching models, containers, or configuration.
+
+---
+
+### Database
+
+- Column `output_minio_url` renamed to `output_json_url` in `wx_transcription_jobs`
+- `002_create_wx_transcription_jobs.sql` removed — unified into `001_create_transcription_runs.sql`
 
 ---
 
 ### Docker
 
-- `dockerfile.whisperx` — removed `libavformat-dev`, `libavcodec-dev` and other
-  build-time headers no longer needed since `av==12.0.0` ships ARM64 prebuilt wheels
-- `docker-compose.yml` — environment variables split cleanly between services:
-  - `whisperx_api` — only networking/storage vars (Redis, MinIO, PostgreSQL)
-  - `whisperx_worker` — full set including HuggingFace, Torch, thread tuning
+- `TRANSFORMERS_CACHE` removed from `whisperx_worker` environment (deprecated, `HF_HOME` is sufficient)
+- `ORT_LOGGING_LEVEL=3` added to suppress onnxruntime ARM64 CPU vendor warning
+- New service `whisperx_cleanup` added — shares the same image as `whisperx_worker`,
+  mounts only `wx_cleanup.py` and `./data/uploads`
