@@ -24,13 +24,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsoxr0 \
     git \
     curl \
-    pkg-config \
-    libavformat-dev \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavutil-dev \
-    libswscale-dev \
-    libswresample-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -67,9 +60,7 @@ RUN pip install --no-cache-dir "av==12.0.0"
 # il wheel arm64 di av==12 appena installato.
 RUN pip install --no-cache-dir --no-deps "faster-whisper==1.0.0" \
  && pip install --no-cache-dir \
-    "huggingface_hub>=0.13" \
-    "onnxruntime>=1.14,<2" \
-    "tokenizers>=0.13,<1"
+    "onnxruntime>=1.14,<2" 
 
 # ── HuggingFace ecosystem ──────────────────────────────────
 RUN pip install --no-cache-dir \
@@ -107,8 +98,6 @@ RUN pip install --no-cache-dir \
 ENV HF_HOME=/app/wx_models
 ENV TRANSFORMERS_CACHE=/app/wx_models
 ENV TORCH_HOME=/app/wx_models/torch
-ENV OMP_NUM_THREADS=1
-ENV MKL_NUM_THREADS=1
 ENV OPENBLAS_NUM_THREADS=1
 ENV TOKENIZERS_PARALLELISM=false
 ENV NNPACK=0

@@ -209,11 +209,12 @@ def recover_stale_jobs():
 def run_job(job_id: str, fw_model, diar_pipeline):
     k          = job_key(job_id)
     input_file = r.hget(k, "input_file")
-    language   = r.hget(k, "language")      or "it"
-    diarize    = r.hget(k, "diarize")       or "true"
-    customer   = r.hget(k, "customer")      or "unknown"
-    project    = r.hget(k, "project")       or "unknown"
-    max_spk    = int(r.hget(k, "max_speakers") or 8)
+    language      = r.hget(k, "language")      or "it"
+    diarize       = r.hget(k, "diarize")       or "true"
+    customer      = r.hget(k, "customer")      or "unknown"
+    project       = r.hget(k, "project")       or "unknown"
+    max_spk       = int(r.hget(k, "max_speakers") or 8)
+    output_format = r.hget(k, "output_format") or "both"  # json | txt | both
 
     if not input_file or not Path(input_file).exists():
         update_job(job_id, status="FAILED", step="INPUT_CHECK", error="input_missing")
@@ -250,61 +251,131 @@ def run_job(job_id: str, fw_model, diar_pipeline):
     if diarize == "true" and diar_pipeline is not None:
         update_job(job_id, step="DIARIZING")
         try:
-            diarization = diar_pipeline(str(wav_path), max_speakers=max_spk)
-            segments    = merge_transcript_diarization(segments, diarization)
+            from pyannote.audio.pipelines.utils.hook import Hook
+
+            def _progress(step_name, completed, total, **kwargs):
+                """Hook che aggiorna Redis e stampa in real-time ad ogni step pyannote."""
+                if total and total > 0:
+                    pct = int(completed / total * 100)
+                    step_label = f"DIARIZING_{step_name.upper()}_{pct}pct"
+                    print(f"[worker] diarizzazione {step_name}: {pct}%", flush=True)
+                    update_job(job_id, step=step_label)
+
+            diarization = diar_pipeline(
+                str(wav_path),
+                max_speakers=max_spk,
+                hook=Hook(_progress),
+            )
+            segments = merge_transcript_diarization(segments, diarization)
             print(f"[worker] diarizzazione completata", flush=True)
         except Exception as e:
             # Diarizzazione fallita: prosegui senza speaker labels
             print(f"[worker] ⚠ diarizzazione fallita job {job_id}: {e}", flush=True)
             update_job(job_id, step="DIAR_SKIPPED_ERROR")
-            # aggiungi UNKNOWN come speaker a tutti i segmenti
             segments = [{**s, "speaker": "UNKNOWN"} for s in segments]
     else:
         segments = [{**s, "speaker": "UNKNOWN"} for s in segments]
 
-    # ── 5. Costruisci output JSON ────────────────────────────────────────────
+    # ── 5. Costruisci output ────────────────────────────────────────────────
     update_job(job_id, step="BUILDING_OUTPUT")
 
     full_text = " ".join(s.get("text", "") for s in segments).strip()
-    output = {
-        "job_id":    job_id,
-        "customer":  customer,
-        "project":   project,
-        "language":  detected_language,
-        "speakers":  sorted({s.get("speaker", "UNKNOWN") for s in segments}),
-        "segments":  segments,
-        "full_text": full_text,
-        "created_at": utc_now(),
-    }
+    speakers  = sorted({s.get("speaker", "UNKNOWN") for s in segments})
 
-    result_path = job_out_dir / "result.json"
-    result_path.write_text(
-        json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    now_str   = utc_now()
+    minio_url     = ""
+    minio_txt_url = ""
 
-    # ── 6. Upload su MinIO ───────────────────────────────────────────────────
-    update_job(job_id, step="UPLOADING_MINIO")
-    minio_key = f"{customer}/{project}/{job_id}/result.json"
-    try:
-        s3 = s3_client()
-        ensure_bucket(s3, MINIO_BUCKET)
-        s3.upload_file(
-            str(result_path), MINIO_BUCKET, minio_key,
-            ExtraArgs={"ContentType": "application/json"},
+    s3 = s3_client()
+    ensure_bucket(s3, MINIO_BUCKET)
+
+    # ── JSON ─────────────────────────────────────────────────────────────────
+    if output_format in ("json", "both"):
+        output = {
+            "job_id":     job_id,
+            "customer":   customer,
+            "project":    project,
+            "language":   detected_language,
+            "speakers":   speakers,
+            "segments":   segments,
+            "full_text":  full_text,
+            "created_at": now_str,
+        }
+        result_path = job_out_dir / "result.json"
+        result_path.write_text(
+            json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        minio_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET}/{minio_key}"
-        print(f"[worker] upload MinIO OK: {minio_url}", flush=True)
-    except Exception as e:
-        print(f"[worker] ⚠ MinIO upload warning job {job_id}: {e}", flush=True)
-        minio_url = f"local:{result_path}"
+        minio_key = f"{customer}/{project}/{job_id}/result.json"
+        try:
+            update_job(job_id, step="UPLOADING_JSON")
+            s3.upload_file(str(result_path), MINIO_BUCKET, minio_key,
+                           ExtraArgs={"ContentType": "application/json"})
+            minio_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET}/{minio_key}"
+            print(f"[worker] upload JSON OK: {minio_url}", flush=True)
+        except Exception as e:
+            print(f"[worker] ⚠ MinIO JSON warning job {job_id}: {e}", flush=True)
+            minio_url = f"local:{result_path}"
+
+    # ── TXT ──────────────────────────────────────────────────────────────────
+    if output_format in ("txt", "both"):
+        txt_lines = [
+            f"RIUNIONE:  {customer} / {project}",
+            f"DATA:      {now_str[:10]}",
+            f"LINGUA:    {detected_language}",
+            f"SPEAKER:   {', '.join(speakers)}",
+            "",
+            "─" * 60,
+        ]
+        current_speaker = None
+        for seg in segments:
+            spk  = seg.get("speaker", "UNKNOWN")
+            text = seg.get("text", "").strip()
+            if not text:
+                continue
+            # Nuova riga speaker solo quando cambia
+            if spk != current_speaker:
+                txt_lines.append("")
+                mm = int(seg["start"] // 60)
+                ss = int(seg["start"] % 60)
+                txt_lines.append(f"[{mm:02d}:{ss:02d}] {spk}")
+                current_speaker = spk
+            txt_lines.append(text)
+
+        txt_lines += [
+            "",
+            "─" * 60,
+            "",
+            "TESTO COMPLETO:",
+            full_text,
+        ]
+
+        txt_content = "\n".join(txt_lines)
+        txt_path    = job_out_dir / "result.txt"
+        txt_path.write_text(txt_content, encoding="utf-8")
+
+        minio_txt_key = f"{customer}/{project}/{job_id}/result.txt"
+        try:
+            update_job(job_id, step="UPLOADING_TXT")
+            s3.upload_file(str(txt_path), MINIO_BUCKET, minio_txt_key,
+                           ExtraArgs={"ContentType": "text/plain; charset=utf-8"})
+            minio_txt_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET}/{minio_txt_key}"
+            print(f"[worker] upload TXT OK: {minio_txt_url}", flush=True)
+        except Exception as e:
+            print(f"[worker] ⚠ MinIO TXT warning job {job_id}: {e}", flush=True)
+            minio_txt_url = f"local:{txt_path}"
 
     # ── 7. Aggiorna Redis e PostgreSQL ───────────────────────────────────────
     update_job(job_id, status="COMPLETED", step="DONE",
-               output_minio_url=minio_url, result_path=str(result_path))
+               output_json_url=minio_url,
+               output_txt_url=minio_txt_url,
+               result_path=str(job_out_dir))
     pg_update(job_id, status="COMPLETED",
-              output_minio_url=minio_url, finished_at=utc_now())
+              output_json_url=minio_url or minio_txt_url,
+              finished_at=utc_now())
 
-    print(f"[worker] ✓ job {job_id} COMPLETED — {minio_url}", flush=True)
+    print(f"[worker] ✓ job {job_id} COMPLETED", flush=True)
+    if minio_url:     print(f"  JSON: {minio_url}", flush=True)
+    if minio_txt_url: print(f"  TXT:  {minio_txt_url}", flush=True)
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────

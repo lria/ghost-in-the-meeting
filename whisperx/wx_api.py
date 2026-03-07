@@ -68,7 +68,7 @@ def pg_insert_job(job_id: str, customer: str, project: str,
 def pg_get_job(job_id: str) -> dict | None:
     sql = """
         SELECT job_id, status, step, customer, project, language,
-               max_speakers, output_minio_url, error_message,
+               max_speakers, output_json_url, error_message,
                created_at, updated_at, started_at, finished_at
         FROM wx_transcription_jobs WHERE job_id = %s
     """
@@ -78,7 +78,7 @@ def pg_get_job(job_id: str) -> dict | None:
     if not row:
         return None
     cols = ["job_id","status","step","customer","project","language",
-            "max_speakers","output_minio_url","error_message",
+            "max_speakers","output_json_url","error_message",
             "created_at","updated_at","started_at","finished_at"]
     return {c: (v.isoformat() if hasattr(v, "isoformat") else v)
             for c, v in zip(cols, row)}
@@ -92,15 +92,55 @@ def health():
     return {"ok": True, "queue": QUEUE_KEY, "queued_jobs": queue_len}
 
 
+@app.get("/queue-stats")
+def queue_stats():
+    """
+    Snapshot completo dello stato della coda.
+    Utile per debug e monitoring da n8n o browser.
+    """
+    queued_ids = r.lrange(QUEUE_KEY, 0, -1)
+
+    counts = {"PENDING": 0, "WORKING": 0, "COMPLETED": 0, "FAILED": 0}
+    stale  = []  # job WORKING da > 30 min (probabilmente bloccati)
+
+    for key in r.scan_iter(match="wx:job:*", count=200):
+        status     = r.hget(key, "status") or "OTHER"
+        job_id     = r.hget(key, "job_id") or key.split(":")[-1]
+        updated_at = r.hget(key, "updated_at") or ""
+
+        counts[status] = counts.get(status, 0) + 1
+
+        if status == "WORKING" and updated_at:
+            try:
+                ts  = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+                age = (datetime.now(timezone.utc) - ts).total_seconds()
+                if age > 1800:  # 30 min
+                    stale.append({
+                        "job_id":     job_id,
+                        "age_min":    round(age / 60, 1),
+                        "updated_at": updated_at,
+                    })
+            except Exception:
+                pass
+
+    return {
+        "queue_length":  r.llen(QUEUE_KEY),
+        "queued_ids":    queued_ids,
+        "status_counts": counts,
+        "stale_working": stale,
+    }
+
+
 @app.post("/jobs", status_code=202)
 async def submit_job(
-    file:         UploadFile = File(...),
-    customer:     str        = Form(...,  description="Nome cliente, es. Alpitour"),
-    project:      str        = Form(...,  description="Nome progetto, es. AI Platform"),
-    language:     str        = Form("it", description="Codice lingua: it, en, auto"),
-    max_speakers: int        = Query(8, ge=1, le=20),
-    diarize:      bool       = Query(True),
-    participants: str        = Form("",   description="Lista partecipanti (per speaker rename)"),
+    file:          UploadFile = File(...),
+    customer:      str        = Form(...,         description="Nome cliente, es. Alpitour"),
+    project:       str        = Form(...,         description="Nome progetto, es. AI Platform"),
+    language:      str        = Form("it",        description="Codice lingua: it, en, auto"),
+    max_speakers:  int        = Form(8,           description="Numero massimo speaker (1-20)"),
+    diarize:       bool       = Form(True,        description="Abilita diarizzazione speaker"),
+    output_format: str        = Form("both",      description="Formato output: json | txt | both"),
+    participants:  str        = Form("",          description="Lista partecipanti (per speaker rename)"),
 ):
     job_id = uuid.uuid4().hex
 
@@ -113,19 +153,24 @@ async def submit_job(
         shutil.copyfileobj(file.file, f)
 
     # Metadati su Redis (il worker li legge da qui)
+    # valida output_format
+    if output_format not in ("json", "txt", "both"):
+        output_format = "both"
+
     meta = {
-        "job_id":       job_id,
-        "status":       "PENDING",
-        "step":         "ENQUEUED",
-        "customer":     customer,
-        "project":      project,
-        "language":     language,
-        "diarize":      str(diarize).lower(),
-        "max_speakers": str(max_speakers),
-        "participants": participants,
-        "input_file":   str(raw_path),
-        "created_at":   utc_now(),
-        "updated_at":   utc_now(),
+        "job_id":        job_id,
+        "status":        "PENDING",
+        "step":          "ENQUEUED",
+        "customer":      customer,
+        "project":       project,
+        "language":      language,
+        "diarize":       str(diarize).lower(),
+        "max_speakers":  str(max_speakers),
+        "output_format": output_format,
+        "participants":  participants,
+        "input_file":    str(raw_path),
+        "created_at":    utc_now(),
+        "updated_at":    utc_now(),
     }
     r.hset(job_key(job_id), mapping=meta)
     r.rpush(QUEUE_KEY, job_id)  # FIFO queue
@@ -139,10 +184,11 @@ async def submit_job(
         print(f"[api] PG insert warning: {e}", flush=True)
 
     return {
-        "job_id":   job_id,
-        "status":   "PENDING",
-        "customer": customer,
-        "project":  project,
+        "job_id":        job_id,
+        "status":        "PENDING",
+        "customer":      customer,
+        "project":       project,
+        "output_format": output_format,
     }
 
 
@@ -173,10 +219,12 @@ def get_job(job_id: str):
         # Preferisce i dati freschi da PostgreSQL (contiene URL MinIO)
         pg_row = pg_get_job(job_id)
         if pg_row:
-            payload["output_minio_url"] = pg_row.get("output_minio_url")
-            payload["finished_at"]      = pg_row.get("finished_at")
+            payload["output_json_url"]     = pg_row.get("output_json_url")
+            payload["finished_at"]          = pg_row.get("finished_at")
         else:
-            payload["output_minio_url"] = r.hget(k, "output_minio_url") or ""
+            payload["output_json_url"]     = r.hget(k, "output_json_url") or ""
+        payload["output_txt_url"]       = r.hget(k, "output_txt_url")  or ""
+        payload["output_format"]        = r.hget(k, "output_format")   or "both"
 
     return payload
 

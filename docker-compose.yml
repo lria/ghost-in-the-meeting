@@ -159,7 +159,7 @@ services:
       # Modello Whisper
       - WHISPER_MODEL=small
       - WHISPER_DEVICE=cpu
-      - WHISPER_COMPUTE_TYPE=int8_float16
+      - WHISPER_COMPUTE_TYPE=int8
       # HuggingFace — necessario per scaricare pyannote
       - HF_TOKEN=${HF_TOKEN}
       - HF_HOME=/app/wx_models
@@ -178,8 +178,8 @@ services:
       - PGUSER=${POSTGRES_USER}
       - PGPASSWORD=${POSTGRES_PASSWORD}
       # Thread — ottimizzati per singolo processo su ARM
-      - OMP_NUM_THREADS=4
-      - MKL_NUM_THREADS=4
+      - OMP_NUM_THREADS=8
+      - MKL_NUM_THREADS=8
       - OPENBLAS_NUM_THREADS=1
       - TOKENIZERS_PARALLELISM=false
       - NNPACK=0
