@@ -1,0 +1,131 @@
+# ============================================================
+# dockerfile.whisperx — faster-whisper + pyannote (senza whisperX)
+#
+# Dipendenze mantenute attivamente:
+#   faster-whisper  1.0.0   ← trascrizione (SYSTRAN, attivo)
+#   pyannote.audio  3.3.2   ← diarizzazione (attivo)
+#   ctranslate2     4.3.1   ← motore inferenza (stabile su arm64)
+#   torch           2.2.2   ← richiesto da pyannote
+#   numpy           1.26.4  ← torch 2.2.2 richiede numpy 1.x
+# ============================================================
+
+# arm64 nativo su Apple Silicon — nessuna emulazione Rosetta
+FROM --platform=linux/arm64 python:3.11-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# ── Dipendenze OS ──────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    sox \
+    libsoxr0 \
+    git \
+    curl \
+    pkg-config \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ── Toolchain Python ───────────────────────────────────────
+RUN pip install --no-cache-dir -U \
+    "pip==24.0" \
+    "wheel==0.43.0" \
+    "setuptools==69.5.1"
+
+# ── NumPy 1.x ─────────────────────────────────────────────
+# torch 2.2.2 richiede numpy 1.x — numpy 2.x causa crash
+RUN pip install --no-cache-dir "numpy==1.26.4"
+
+# ── PyTorch CPU arm64 ──────────────────────────────────────
+# Su arm64 nativo: niente --index-url whl/cpu, niente suffisso +cpu
+RUN pip install --no-cache-dir "torch==2.2.2" "torchaudio==2.2.2"
+
+# ── CTranslate2 4.3.1 ─────────────────────────────────────
+# faster-whisper 1.x richiede ctranslate2 >= 4.0
+# 4.3.1 = stabile su arm64 (4.4+ ha bug executable stack su Rosetta)
+RUN pip install --no-cache-dir "ctranslate2==4.3.1"
+
+# ── PyAV — installato prima di faster-whisper ─────────────
+# faster-whisper==1.0.0 richiede av==11.* come dipendenza.
+# Su arm64 non esistono wheel precompilati per av==11 — compila
+# da sorgente e fallisce se pkg-config/libav* non sono presenti.
+# Soluzione: installiamo av==12.0.0 che HA wheel arm64 precompilati,
+# poi faster-whisper con --no-deps per non sovrascriverlo.
+RUN pip install --no-cache-dir "av==12.0.0"
+
+# ── faster-whisper 1.0.0 ───────────────────────────────────
+# --no-deps: evita che faster-whisper installi av==11.* sovrascrivendo
+# il wheel arm64 di av==12 appena installato.
+RUN pip install --no-cache-dir --no-deps "faster-whisper==1.0.0" \
+ && pip install --no-cache-dir \
+    "huggingface_hub>=0.13" \
+    "onnxruntime>=1.14,<2" \
+    "tokenizers>=0.13,<1"
+
+# ── HuggingFace ecosystem ──────────────────────────────────
+RUN pip install --no-cache-dir \
+    "transformers==4.39.3" \
+    "huggingface_hub==0.22.2" \
+    "tokenizers==0.15.2"
+
+# ── pyannote.audio 3.3.2 ───────────────────────────────────
+# Diarizzazione speaker. 3.3.2 = ultima stabile, API stabile.
+RUN pip install --no-cache-dir \
+    "pyannote.audio==3.3.2" \
+    "pyannote.core==5.0.0" \
+    "pyannote.database==5.1.3" \
+    "pyannote.metrics==3.2.1" \
+    "pyannote.pipeline==3.0.1"
+
+# ── Dipendenze runtime worker ──────────────────────────────
+RUN pip install --no-cache-dir \
+    "pandas==2.2.2" \
+    "nltk==3.8.1" \
+    "tqdm==4.66.2"
+
+# ── Stack API e storage ────────────────────────────────────
+RUN pip install --no-cache-dir \
+    "fastapi==0.110.0" \
+    "uvicorn[standard]==0.29.0" \
+    "python-multipart==0.0.9" \
+    "redis==5.0.4" \
+    "boto3==1.34.69" \
+    "psycopg2-binary==2.9.9" \
+    "httpx==0.27.0" \
+    "requests==2.31.0"
+
+# ── Variabili ambiente runtime ─────────────────────────────
+ENV HF_HOME=/app/wx_models
+ENV TRANSFORMERS_CACHE=/app/wx_models
+ENV TORCH_HOME=/app/wx_models/torch
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV TOKENIZERS_PARALLELISM=false
+ENV NNPACK=0
+
+# ── Verifica finale compatibilità ──────────────────────────
+RUN python -c "\
+import torch; print('torch', torch.__version__); \
+from faster_whisper import WhisperModel; print('faster_whisper OK'); \
+import ctranslate2; print('ctranslate2', ctranslate2.__version__); \
+from pyannote.audio import Pipeline; print('pyannote OK'); \
+import fastapi; print('fastapi OK'); \
+import redis; print('redis OK'); \
+import boto3; print('boto3 OK'); \
+import psycopg2; print('psycopg2 OK')"
+
+# ── Copia file applicazione ────────────────────────────────
+COPY whisperx/wx_api.py    /app/wx_api.py
+COPY whisperx/wx_worker.py /app/wx_worker.py
+
+EXPOSE 8000

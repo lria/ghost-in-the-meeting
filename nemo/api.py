@@ -3,6 +3,7 @@ import uuid
 import json
 import shutil
 from pathlib import Path
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, UploadFile, File, Query
 from fastapi.responses import JSONResponse
@@ -22,12 +23,19 @@ r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 
 app = FastAPI(title="NeMo Jobs API (async polling)")
 
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def job_key(job_id: str) -> str:
     return f"nemo:job:{job_id}"
+
 
 @app.get("/health")
 def health():
     return {"ok": True, "redis": REDIS_URL, "queue": QUEUE_KEY}
+
 
 @app.post("/jobs")
 async def submit_job(
@@ -45,15 +53,19 @@ async def submit_job(
     meta = {
         "job_id": job_id,
         "status": "PENDING",
-        "max_speakers": int(max_speakers),
+        "max_speakers": str(int(max_speakers)),
         "input_file": str(raw_path),
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+        "step": "ENQUEUED",
     }
 
     r.hset(job_key(job_id), mapping=meta)
-    # enqueue job id
+    # enqueue job id (FIFO: RPUSH + BLPOP)
     r.rpush(QUEUE_KEY, job_id)
 
     return {"job_id": job_id, "status": "PENDING"}
+
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):
@@ -64,7 +76,13 @@ def get_job(job_id: str):
     status = r.hget(k, "status") or "UNKNOWN"
     res_path = r.hget(k, "result_path")
 
-    payload = {"job_id": job_id, "status": status}
+    payload = {
+        "job_id": job_id,
+        "status": status,
+        "step": r.hget(k, "step") or "",
+        "created_at": r.hget(k, "created_at") or "",
+        "updated_at": r.hget(k, "updated_at") or "",
+    }
 
     if status == "FAILED":
         payload["error"] = r.hget(k, "error") or "unknown_error"
@@ -79,3 +97,31 @@ def get_job(job_id: str):
             payload["detail"] = str(e)
 
     return payload
+
+
+@app.post("/jobs/{job_id}/retry")
+def retry_job(job_id: str):
+    """
+    Re-enqueue a job that is stuck in WORKING/PENDING (or even FAILED) provided
+    the input file still exists.
+    """
+    k = job_key(job_id)
+    if not r.exists(k):
+        return JSONResponse(status_code=404, content={"error": "job_not_found", "job_id": job_id})
+
+    input_file = r.hget(k, "input_file")
+    if not input_file or not Path(input_file).exists():
+        return JSONResponse(status_code=400, content={"error": "input_missing", "job_id": job_id})
+
+    r.hset(
+        k,
+        mapping={
+            "status": "PENDING",
+            "step": "REQUEUED_MANUAL",
+            "updated_at": utc_now(),
+            "error": "",
+            "detail": "",
+        },
+    )
+    r.rpush(QUEUE_KEY, job_id)
+    return {"job_id": job_id, "status": "PENDING", "step": "REQUEUED_MANUAL"}

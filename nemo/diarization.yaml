@@ -17,7 +17,8 @@ diarizer:
       min_duration_off: 0.2
 
   speaker_embeddings:
-    model_path: titanet_large
+  #modello riconoscimento speaker large/small/base
+    model_path: titanet_small
     parameters:
       window_length_in_sec: 1.5
       shift_length_in_sec: 0.75

@@ -19,7 +19,6 @@ services:
       timeout: 5s
       retries: 10
 
-
   redis:
     image: redis:7-alpine
     container_name: n8n_stack_redis
@@ -35,8 +34,8 @@ services:
     volumes:
       - ./qdrant_data:/qdrant/storage
     ports:
-      - "6333:6333" # API HTTP (se ti serve da host)
-      - "6334:6334" # gRPC (opzionale)
+      - "6333:6333"
+      - "6334:6334"
 
   ollama:
     image: ollama/ollama:latest
@@ -46,9 +45,7 @@ services:
       - ./ollama_data:/root/.ollama
     ports:
       - "11434:11434"
-    # Se sei su Linux + GPU NVIDIA, qui serve configurazione runtime nvidia (extra)
 
-  # Opzionale: storage S3-compatible per documenti
   minio:
     image: minio/minio:latest
     container_name: n8n_stack_minio
@@ -79,87 +76,123 @@ services:
     environment:
       - TZ=${TZ}
       - NODE_ENV=production
-
-      # n8n security
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - N8N_SECURE_COOKIE=false
-
-      # DB: Postgres
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
-
-      # Redis (necessario se usi queue mode / worker; non rompe anche se non lo abiliti)
       - QUEUE_BULL_REDIS_HOST=redis
       - QUEUE_BULL_REDIS_PORT=6379
-
-      # URL interno utile per webhooks dietro reverse-proxy (per ora lasciamo neutro)
-      # - N8N_HOST=your-domain.tld
-      # - N8N_PROTOCOL=https
-      # - WEBHOOK_URL=https://your-domain.tld/
-
     volumes:
       - ./n8n_data:/home/node/.n8n
 
-  whisperx:
+  # ── WhisperX API ──────────────────────────────────────────────────────────
+  # Riceve upload, crea job su Redis, espone polling.
+  # NON carica modelli — nessun parametro Whisper/HF/Torch necessario.
+  whisperx_api:
     build:
       context: .
-      dockerfile: Dockerfile.whisperx
-    container_name: n8n_whisperx
+      dockerfile: whisperx/dockerfile.whisperx
+    container_name: n8n_whisperx_api
     restart: unless-stopped
-    # su Mac Apple Silicon spesso conviene forzare amd64
-    platform: linux/amd64
-
- # crea le directory necessarie sul volume ad ogni avvio
+    platform: linux/arm64
     command:
       - bash
       - -lc
       - |
-        mkdir -p /app/wx_models/nltk /app/wx_models/torch /app/wx_models/hf /app/data        
-        exec uvicorn entry_async:app --host 0.0.0.0 --port 8000 --workers 5
+        mkdir -p /app/data
+        exec uvicorn wx_api:app --host 0.0.0.0 --port 8000 --workers 1
     environment:
-      - WHISPER_DEVICE=cpu
-      - WHISPER_THREADS=10
-      # pre-carica almeno un modello (puoi mettere: tiny, base, small, medium, large-v3)
-      - WHISPER_MODELS=small
-      # token per diarization (nome variabile richiesto dall'immagine)
-      - WHISPER_HF_TOKEN=${HF_TOKEN}
-      - HF_TOKEN=${HF_TOKEN}
-      - HUGGINGFACE_TOKEN=${HF_TOKEN}
       - TZ=${TZ}
-      - HF_HUB_OFFLINE=0
-      - TRANSFORMERS_OFFLINE=0
-      - HF_HOME=/app/wx_models
-      - TRANSFORMERS_CACHE=/app/wx_models
-      - NLTK_DATA=/usr/local/share/nltk_data
-      - TORCH_HOME=/app/wx_models/torch
-      - NNPACK=0 
+      - REDIS_URL=redis://redis:6379/0
+      - WX_QUEUE_KEY=wx:queue
+      - WX_DATA_DIR=/app/data
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - MINIO_BUCKET=n8n-minute
+      - MINIO_BUCKET=wx-transcriptions
       - MINIO_SECURE=false
       - PGHOST=postgres
       - PGPORT=5432
-      - PGDATABASE=n8n
-      - PGUSER=n8n
-      - PGPASSWORD=ChangeMe_DB
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - PGDATABASE=${POSTGRES_DB}
+      - PGUSER=${POSTGRES_USER}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ./data/uploads:/app/data
+      - ./whisperx/wx_api.py:/app/wx_api.py:ro
+    ports:
+      - "9200:8000"
+    depends_on:
+      - redis
+      - postgres
+      - minio
 
+  # ── WhisperX Worker ───────────────────────────────────────────────────────
+  # Carica faster-whisper + pyannote UNA VOLTA all'avvio.
+  # Consuma la coda Redis, trascrive, diarizza, salva su MinIO e PostgreSQL.
+  whisperx_worker:
+    build:
+      context: .
+      dockerfile: whisperx/dockerfile.whisperx
+    container_name: n8n_whisperx_worker
+    restart: unless-stopped
+    platform: linux/arm64
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /app/data/in /app/data/out
+        exec python wx_worker.py
+    environment:
+      - TZ=${TZ}
+      - REDIS_URL=redis://redis:6379/0
+      - WX_QUEUE_KEY=wx:queue
+      - WX_DATA_DIR=/app/data
+      - WX_BLPOP_TIMEOUT=5
+      - WX_STALE_SEC=2700
+      # Modello Whisper
+      - WHISPER_MODEL=small
+      - WHISPER_DEVICE=cpu
+      - WHISPER_COMPUTE_TYPE=int8_float16
+      # HuggingFace — necessario per scaricare pyannote
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HOME=/app/wx_models
+      - TRANSFORMERS_CACHE=/app/wx_models
+      - TORCH_HOME=/app/wx_models/torch
+      - NLTK_DATA=/usr/local/share/nltk_data
+      # Storage
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO_BUCKET=wx-transcriptions
+      - MINIO_SECURE=false
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=${POSTGRES_DB}
+      - PGUSER=${POSTGRES_USER}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      # Thread — ottimizzati per singolo processo su ARM
+      - OMP_NUM_THREADS=4
+      - MKL_NUM_THREADS=4
+      - OPENBLAS_NUM_THREADS=1
+      - TOKENIZERS_PARALLELISM=false
+      - NNPACK=0
     volumes:
       - ./data/uploads:/app/data
       - ./data/whisper_models:/app/wx_models
       - ./data/nltk_data:/usr/local/share/nltk_data
-    ports:
-      - "9200:8000"
-
+      - ./whisperx/wx_worker.py:/app/wx_worker.py:ro
+    depends_on:
+      - redis
+      - postgres
+      - minio
+      - whisperx_api
 
   webform:
     image: nginx:alpine
@@ -170,18 +203,18 @@ services:
     volumes:
       - ./webform:/usr/share/nginx/html:ro
 
-
   nemo_api:
     build:
       context: .
-      dockerfile: nemo/Dockerfile
+      dockerfile: nemo/dockerfile.nemo
+    profiles: [nemo]
     container_name: n8n_nemo_api
     restart: unless-stopped
     environment:
       - TZ=${TZ}
       - REDIS_URL=redis://redis:6379/0
       - NEMO_QUEUE_KEY=nemo:queue
-      - NEMO_ASR_MODEL=stt_multilingual_fastconformer_hybrid_large
+      - NEMO_ASR_MODEL=${NEMO_ASR_MODEL}
     volumes:
       - ./data/nemo:/data
     ports:
@@ -193,18 +226,30 @@ services:
   nemo_worker:
     build:
       context: .
-      dockerfile: nemo/Dockerfile
+      dockerfile: nemo/dockerfile.nemo
+    profiles: [nemo]
     container_name: n8n_nemo_worker
-    restart: unless-stopped
+    platform: linux/amd64
+    restart: no
     environment:
       - TZ=${TZ}
       - REDIS_URL=redis://redis:6379/0
       - NEMO_QUEUE_KEY=nemo:queue
-      - NEMO_ASR_MODEL=stt_multilingual_fastconformer_hybrid_large
+      - NEMO_ASR_MODEL=${NEMO_ASR_MODEL}
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
+      - TORCH_NUM_THREADS=1
+      - TORCH_NUM_INTEROP_THREADS=1
+      - TOKENIZERS_PARALLELISM=false
+      - TORCH_HOME=/models-cache
+      - XDG_CACHE_HOME=/models-cache
     volumes:
       - ./data/nemo:/data
+      - ./data/nemo_cache:/root/.cache/torch
+      - ./data/nemo_models_cache:/models-cache
     command: ["python", "/app/worker.py"]
     depends_on:
       - redis
       - nemo_api
-

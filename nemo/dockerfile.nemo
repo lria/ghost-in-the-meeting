@@ -1,0 +1,62 @@
+FROM python:3.10-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    libsndfile1-dev \
+    git \
+    build-essential \
+    cmake \
+    pkg-config \
+    protobuf-compiler \
+    libprotobuf-dev \
+    libffi-dev \
+    libssl-dev \
+    rustc cargo \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Torch CPU
+RUN python -m pip install --no-cache-dir \
+  --index-url https://download.pytorch.org/whl/cpu \
+  torch==2.2.2 torchaudio==2.2.2
+
+  
+# base tooling + pkg_resources
+RUN python -m pip install --no-cache-dir -U pip wheel "setuptools<82"
+
+# pins (evita casini build)
+RUN python -m pip install --no-cache-dir "numpy==1.26.4" "Cython>=3.0.8" "pybind11>=2.12.0"
+
+COPY nemo/requirements.txt /app/requirements.txt
+RUN python -m pip install --no-cache-dir --no-build-isolation -r /app/requirements.txt
+
+# guarantee pkg_resources
+RUN python -m pip install --no-cache-dir -U "setuptools<82"
+
+COPY nemo/api.py /app/api.py
+COPY nemo/worker.py /app/worker.py
+COPY nemo/diarization.yaml /app/diarization.yaml
+
+RUN mkdir -p /data/in /data/out
+
+# valore di default (può essere sovrascritto da docker-compose)
+ENV NEMO_ASR_MODEL=stt_multilingual_fastconformer_hybrid_medium
+
+# pre-download del modello usando la variabile env
+RUN python3 - <<'PY'
+import os
+import nemo.collections.asr as nemo_asr
+
+model = os.getenv("NEMO_ASR_MODEL")
+print(f"Downloading NeMo model: {model}")
+
+nemo_asr.models.ASRModel.from_pretrained(model_name=model)
+PY
+
+
+EXPOSE 8000
