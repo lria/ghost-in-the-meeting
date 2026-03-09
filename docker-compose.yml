@@ -222,6 +222,31 @@ services:
     depends_on:
       - redis
 
+  # ── SSE Broker ───────────────────────────────────────────────────────────────
+  # Legge lo stato dei job da Redis e lo pubblica come Server-Sent Events.
+  # Il browser si connette qui al caricamento pagina per la lista job
+  # e poi apre un EventSource per ricevere aggiornamenti in tempo reale.
+  # Zero modifiche a wx_api o wx_worker.
+  sse_broker:
+    build:
+      context: .
+      dockerfile: broker/dockerfile.sse
+    container_name: n8n_sse_broker
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - REDIS_URL=redis://redis:6379/0
+      - SSE_POLL_INTERVAL=2.0    # secondi tra i poll Redis
+      - SSE_KEEPALIVE_SEC=15.0   # heartbeat per tenere aperta la connessione
+    volumes:
+      - ./broker/sse_broker.py:/app/sse_broker.py:ro
+      
+    ports:
+      - "9400:8000"
+    depends_on:
+      - redis
+
+  # ── Webform ───────────────────────────────────────────────────────────────
   webform:
     image: nginx:alpine
     container_name: n8n_stack_webform

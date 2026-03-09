@@ -14,8 +14,9 @@ Transcribes audio in Italian and English, identifies speakers, and produces stru
 | **pyannote.audio** | Speaker diarization |
 | **n8n** | Workflow orchestration |
 | **PostgreSQL** | Job tracking and metadata |
-| **Redis** | Job queue (FIFO) |
+| **Redis** | Job queue (FIFO) and job state |
 | **MinIO** | Output storage (JSON + TXT) |
+| **SSE Broker** | Real-time job events to the browser |
 | **Qdrant** | Vector store (RAG, upcoming) |
 | **Ollama** | Local LLM for minute generation (upcoming) |
 
@@ -24,7 +25,16 @@ Transcribes audio in Italian and English, identifies speakers, and produces stru
 ## Architecture
 
 ```
-User / n8n
+User
+    │
+    ▼
+webform (nginx — port 8081)
+    │  drag-and-drop upload, live status via SSE
+    │
+    ▼
+n8n (port 5678)
+    │  POST /webhook/minute/ingest
+    │  validates + forwards to whisperx_api
     │
     ▼
 whisperx_api          (FastAPI — port 9200)
@@ -43,6 +53,9 @@ whisperx_worker
 
 whisperx_cleanup       (runs every hour)
     └── deletes local temp files for COMPLETED/FAILED jobs
+
+sse_broker             (FastAPI — port 9400)
+    └── polls Redis every 2s → pushes job deltas to browser via SSE
 ```
 
 ---
@@ -98,6 +111,18 @@ docker exec n8n_stack_minio sh -c '
 ```
 
 **5. First run** — build takes ~10 minutes (downloads PyTorch + pyannote models)
+
+---
+
+## Web UI
+
+Open `http://localhost:8081` in your browser.
+
+**Left column — Nuova Trascrizione:** drag-and-drop audio upload, customer/project metadata, language, speaker count, output format, diarization toggle.
+
+**Right column — Stato Trascrizioni:**
+- **Trascrizione Corrente**: live progress with animated pipeline steps, start/updated timestamps, "IN CODA" badge when jobs are queued
+- **Storico Trascrizioni**: accordion list of completed/failed jobs with download links
 
 ---
 
@@ -201,6 +226,21 @@ curl http://localhost:9200/queue-stats
 ```bash
 curl http://localhost:9200/health
 ```
+
+---
+
+## SSE Broker API
+
+Base URL: `http://localhost:9400`
+
+### `GET /jobs` — All jobs snapshot
+Returns the full list of jobs from Redis. Used by the UI on page load.
+
+### `GET /events?all=1` — Live stream (all jobs)
+Server-Sent Events stream. Sends `job_update` events for any job state change.
+
+### `GET /events?jobs=id1,id2` — Live stream (filtered)
+SSE stream filtered to specific job IDs.
 
 ---
 
@@ -311,7 +351,9 @@ docker exec n8n_stack_minio sh -c '
 | Service | Port | URL |
 |---|---|---|
 | n8n | 5678 | http://localhost:5678 |
+| Web UI | 8081 | http://localhost:8081 |
 | Whisper API | 9200 | http://localhost:9200 |
+| SSE Broker | 9400 | http://localhost:9400 |
 | MinIO API | 9000 | http://localhost:9000 |
 | MinIO Console | 9001 | http://localhost:9001 |
 | Ollama | 11434 | http://localhost:11434 |
@@ -327,8 +369,9 @@ docker exec n8n_stack_minio sh -c '
 - [x] Job queue with stale recovery
 - [x] Cleanup worker for temporary files
 - [x] Human-readable MinIO folder naming
+- [x] SSE broker for real-time browser updates
+- [x] Web UI with live job status
 - [ ] Speaker rename (participants → SPEAKER_00 mapping)
 - [ ] RAG indexing of transcripts into Qdrant
 - [ ] Minute generation via Ollama
-- [ ] Web form for audio upload
 - [ ] n8n workflow for end-to-end automation

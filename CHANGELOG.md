@@ -1,4 +1,42 @@
-## Audio Transcription Pipeline — Fixes & New Services
+## [2026-03-09] — SSE Broker + Web UI v2
+
+### New services
+
+#### SSE Broker — `broker/sse_broker.py` + `broker/dockerfile.sse` _(new)_
+Lightweight FastAPI microservice that exposes real-time job events to the browser via Server-Sent Events.
+Reads job state from Redis (HASH `wx:job:{id}`) by polling every 2s and pushes only deltas.
+**Zero modifications** to `wx_worker.py`, `wx_api.py`, `wx_cleanup.py`.
+
+Endpoints:
+- `GET /health` — broker status and Redis connectivity
+- `GET /jobs` — full snapshot of all jobs (used on page load)
+- `GET /events?all=1` — SSE stream for all jobs
+- `GET /events?jobs=id1,id2` — SSE stream filtered by job IDs
+
+External port: `9400`.
+
+#### Web UI v2 — `webform/index.html` _(rewritten)_
+Two-column interface with live updates via SSE.
+
+**Left column — Nuova Trascrizione:**
+- Drag-and-drop audio upload
+- Fields: customer, project, participants, language, max speakers, output format, diarization toggle
+- Submits via `POST n8n :5678/webhook/minute/ingest`
+
+**Right column — Stato Trascrizioni:**
+- **Trascrizione Corrente** section: job title in format `Customer — Project — del DD/MM/YYYY HH:MM`, status badge, progress bar, start/updated timestamps, animated pipeline steps (done / active / pending), "IN CODA" badge when other jobs are queued
+- **Storico Trascrizioni** section: accordion per completed/failed job — date, status, JSON/TXT download links, error box with retry button
+- Stream status badge (Live / Connecting / Idle / Disconnected) with auto-reconnect
+- Health indicators for whisperx API and SSE broker in the header
+
+### Docker
+- Added `sse_broker` service on port `9400`
+- Build context: `.`, dockerfile: `broker/dockerfile.sse`
+- Volume: `./broker/sse_broker.py:/app/sse_broker.py:ro`
+
+---
+
+## [2026-03-07] — Audio Transcription Pipeline: Fixes & New Services
 
 ### Bug fixes
 

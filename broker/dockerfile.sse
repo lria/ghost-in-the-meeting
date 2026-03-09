@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    fastapi==0.111.0 \
+    uvicorn[standard]==0.29.0 \
+    redis==5.0.4
+
+COPY broker/sse_broker.py /app/sse_broker.py
+
+EXPOSE 8000
+
+CMD ["uvicorn", "sse_broker:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

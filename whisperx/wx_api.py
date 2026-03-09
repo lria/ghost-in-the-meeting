@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import redis
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -39,6 +40,13 @@ PG_DSN = (
 
 r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 app = FastAPI(title="WhisperX Jobs API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # in produzione restringi a http://localhost:8081
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
