@@ -23,9 +23,15 @@ services:
     image: redis:7-alpine
     container_name: n8n_stack_redis
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - ./redis_data:/data
+
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -159,7 +165,7 @@ services:
       # Modello Whisper
       - WHISPER_MODEL=small
       - WHISPER_DEVICE=cpu
-      - WHISPER_COMPUTE_TYPE=int8_float16
+      - WHISPER_COMPUTE_TYPE=int8
       # HuggingFace — necessario per scaricare pyannote
       - HF_TOKEN=${HF_TOKEN}
       - HF_HOME=/app/wx_models
@@ -189,10 +195,12 @@ services:
       - ./data/nltk_data:/usr/local/share/nltk_data
       - ./whisperx/wx_worker.py:/app/wx_worker.py:ro
     depends_on:
-      - redis
+      - redis:
+        condition: service_healthy
       - postgres
       - minio
       - whisperx_api
+
 
   # ── WhisperX Cleanup Worker ───────────────────────────────────────────────
   # Cancella periodicamente i file temporanei su disco (input + output locale)
@@ -245,6 +253,56 @@ services:
       - "9400:8000"
     depends_on:
       - redis
+
+
+  # ── Minutes API ──────────────────────────────────────────────────────────────
+  # Gestisce speaker rename, generazione minuta via Ollama, RAG su Qdrant.
+  # Nessuna modifica a wx_api, wx_worker, sse_broker.
+  minutes_api:
+    build:
+      context: .
+      dockerfile: minutes/dockerfile.minutes
+    container_name: n8n_minutes_api
+    restart: unless-stopped
+    platform: linux/arm64
+    command:
+      - bash
+      - -lc
+      - |
+        exec uvicorn minutes_api:app --host 0.0.0.0 --port 8000 --workers 1
+    environment:
+      - TZ=${TZ}
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_URL=http://ollama:11434
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=meeting_minutes
+      - EMBED_MODEL=all-MiniLM-L6-v2
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO_BUCKET=wx-transcriptions
+      - MINIO_SECURE=false
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=${POSTGRES_DB}
+      - PGUSER=${POSTGRES_USER}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - PROMPTS_DIR=/app/prompts
+      - TOKENIZERS_PARALLELISM=false
+      - OMP_NUM_THREADS=2
+    volumes:
+      - ./minutes/minutes_api.py:/app/minutes_api.py:ro
+      - ./minutes/prompts:/app/prompts:ro
+      - ./data/embeddings_cache:/root/.cache  # cache modello embeddings (~80MB)
+    ports:
+      - "9500:8000"
+    depends_on:
+      - redis
+      - postgres
+      - minio
+      - ollama
+      - qdrant
+
 
   # ── Webform ───────────────────────────────────────────────────────────────
   webform:

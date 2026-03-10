@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Minute — Associa Speaker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Campione speaker ── */
+    .sample-box {
+      margin-top: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .sample-box-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .sample-box-label {
+      font-size: 10px; font-weight: 600;
+      color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em;
+    }
+    .sample-range {
+      margin-left: auto;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--accent);
+      background: var(--accent-light);
+      border: 1px solid #bfdbfe;
+      border-radius: 4px;
+      padding: 1px 7px;
+    }
+    .sample-segments { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+    .sample-seg {
+      display: flex; gap: 8px; align-items: baseline;
+    }
+    .sample-ts {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 90px;
+    }
+    .sample-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+    .sample-more {
+      padding: 4px 10px 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <header>
+    <a class="logo" href="index.html">
+      <div class="logo-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+        </svg>
+      </div>
+      Minute
+    </a>
+    <span class="header-badge">Speaker</span>
+    <div class="header-stack" id="header-stack"></div>
+  </header>
+
+  <div class="page-header">
+    <a class="page-back" href="index.html">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Torna all'indice
+    </a>
+    <div class="page-header-inner">
+      <div class="page-title-wrap">
+        <div class="page-title">Associa Speaker</div>
+        <div class="page-subtitle" id="page-subtitle">Associa le voci rilevate ai partecipanti reali</div>
+        <div class="page-job-pill" id="job-pill" style="display:none">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          <span id="job-pill-text">—</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-start;padding-top:4px">
+        <button class="btn-secondary" onclick="history.back()" style="display:inline-flex;align-items:center;gap:6px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Indietro
+        </button>
+        <button class="btn-secondary" id="btn-goto-minutes" style="display:none" onclick="gotoMinutes()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Genera Minuta
+        </button>
+        <button class="btn-accent" id="btn-save" onclick="saveSpeakers()" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Salva mapping
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <main class="page-main">
+
+    <!-- Loading state -->
+    <div id="loading-state" style="display:flex;align-items:center;justify-content:center;padding:60px;gap:12px">
+      <div class="gen-spinner"></div>
+      <span style="font-size:13px;color:var(--text-muted)">Caricamento dati trascrizione…</span>
+    </div>
+
+    <!-- Error state -->
+    <div id="error-state" style="display:none">
+      <div class="error-box">
+        <div class="error-title">Errore caricamento</div>
+        <div class="error-msg" id="error-msg"></div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div id="content" style="display:none">
+
+      <!-- Info box note -->
+      <div class="info-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div class="info-box-text">
+          Il riconoscimento vocale di Whisper <strong>non ha memoria tra sessioni</strong>: ogni trascrizione produce nuovi label generici (SPEAKER_00, SPEAKER_01…).
+          Associa qui ogni speaker al nome reale — il mapping verrà usato per generare la minuta.
+          I nomi usati in precedenti sessioni dello stesso cliente appaiono come suggerimenti.
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+        <!-- LEFT: Speaker cards -->
+        <div class="panel">
+          <div class="panel-header">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span class="panel-title">Speaker Rilevati</span>
+            <span class="panel-subtitle" id="speakers-count"></span>
+          </div>
+          <div class="panel-body" id="speakers-container"></div>
+        </div>
+
+        <!-- RIGHT: Annotated transcript — sticky, full viewport height -->
+        <div class="panel" style="position:sticky;top:72px;max-height:calc(100vh - 92px);display:flex;flex-direction:column;overflow:hidden">
+          <div class="panel-header" style="flex-shrink:0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <span class="panel-title">Trascrizione Annotata</span>
+            <span class="panel-subtitle">Aggiornata in tempo reale</span>
+            <span class="badge-soon" style="margin-left:auto;display:flex;align-items:center;gap:4px">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+              Audio coming soon
+            </span>
+          </div>
+          <div class="transcript-body" id="transcript-body" style="flex:1;overflow-y:auto;padding:16px 20px">
+            <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:12px">Trascrizione non disponibile</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  const MINUTES_BASE = "http://localhost:9500";
+  const params = new URLSearchParams(location.search);
+  const jobId  = params.get("job_id");
+
+  // speaker_id → {name, company} — aggiornato in tempo reale dai form
+  let speakersData = [];
+  let currentAliases = {};
+  let transcriptSegments = [];  // segmenti reali da result.json
+
+  if (!jobId) {
+    showError("Nessun job_id specificato nell'URL. Torna all'indice e riprova.");
+  } else {
+    loadSpeakers();
+  }
+
+  async function loadSpeakers() {
+    showLoading(true);
+    try {
+      const resp = await fetch(`${MINUTES_BASE}/jobs/${jobId}/speakers`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      speakersData = data.speakers || [];
+      currentAliases = {};
+      for (const spk of speakersData) {
+        if (spk.name) currentAliases[spk.speaker_id] = {name: spk.name, company: spk.company || ""};
+      }
+      renderPageInfo(data);
+      // Carica il transcript PRIMA di renderizzare le card,
+      // così i campioni sono già disponibili
+      await loadTranscript();
+      renderSpeakers(data);
+      showLoading(false);
+      document.getElementById('content').style.display = 'block';
+    } catch(e) {
+      showLoading(false);
+      showError(`Impossibile caricare i dati del job: ${e.message}`);
+    }
+  }
+
+  function renderPageInfo(data) {
+    document.getElementById('page-subtitle').textContent =
+      `${data.customer || '?'} — ${data.project || '?'}`;
+    const pill = document.getElementById('job-pill');
+    pill.style.display = 'inline-flex';
+    document.getElementById('job-pill-text').textContent = jobId.slice(0,12) + '…';
+    document.getElementById('header-stack').innerHTML = `
+      <div class="stack-pill" style="font-size:11px;font-weight:500">${data.customer || ''}</div>
+      <div class="stack-pill" style="font-size:11px">${data.project || ''}</div>`;
+    if (data.speakers_mapped) {
+      document.getElementById('btn-goto-minutes').style.display = 'inline-flex';
+    }
+  }
+
+  function renderSpeakers(data) {
+    const container = document.getElementById('speakers-container');
+    const count = document.getElementById('speakers-count');
+    count.textContent = `${data.speakers.length} speaker`;
+
+    if (!data.speakers.length) {
+      container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">Nessuno speaker rilevato in questa trascrizione.</div>`;
+      return;
+    }
+
+    // Colori per speaker
+    const colors = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#be185d','#65a30d'];
+
+    container.innerHTML = data.speakers.map((spk, i) => {
+      const initials = spk.speaker_id.replace('SPEAKER_','S');
+      const color = colors[i % colors.length];
+      const mapped = !!spk.name;
+      const mins = Math.floor(spk.duration_sec / 60);
+      const secs = Math.round(spk.duration_sec % 60);
+      const duration = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+      // Suggerimenti dello stesso cliente
+      const suggs = (data.suggestions || [])
+        .filter(s => s.name)
+        .slice(0, 5);
+
+      // Campione: prendi i primi 3 segmenti di questo speaker dai dati già caricati
+      const SAMPLE_N = 3;
+      const samples = transcriptSegments
+        .filter(s => s.speaker === spk.speaker_id && s.text && s.text.trim())
+        .slice(0, SAMPLE_N);
+
+      let sampleHtml = '';
+      if (samples.length) {
+        const rangeStart = fmtTime(samples[0].start);
+        const rangeEnd   = fmtTime(samples[samples.length - 1].end);
+        const segsHtml = samples.map(s =>
+          `<div class="sample-seg">
+            <span class="sample-ts">${fmtTime(s.start)} → ${fmtTime(s.end)}</span>
+            <span class="sample-text">${escHtml(s.text.trim())}</span>
+          </div>`
+        ).join('');
+        const moreCount = spk.segments - SAMPLE_N;
+        const moreHtml  = moreCount > 0
+          ? `<div class="sample-more">+ altri ${moreCount} interventi</div>`
+          : '';
+        sampleHtml = `
+        <div class="sample-box">
+          <div class="sample-box-header">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+            <span class="sample-box-label">Campione audio</span>
+            <span class="sample-range">${rangeStart} → ${rangeEnd}</span>
+          </div>
+          <div class="sample-segments">${segsHtml}</div>
+          ${moreHtml}
+        </div>`;
+      }
+
+      return `<div class="speaker-card ${mapped?'speaker-card-mapped':''}" id="card-${spk.speaker_id}" data-speaker="${spk.speaker_id}">
+        <div class="speaker-card-header">
+          <div class="speaker-avatar" style="${mapped?`background:${color}20;border-color:${color}40;color:${color}`:''}">${initials}</div>
+          <div style="flex:1">
+            <div class="speaker-id">${spk.speaker_id}</div>
+            <div class="speaker-stats">${spk.segments} interventi · ${duration}</div>
+          </div>
+          ${mapped?`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:''}
+        </div>
+        ${sampleHtml}
+        <div class="field-row" style="gap:8px;margin-top:10px">
+          <div class="field-group">
+            <label>Nome</label>
+            <input type="text" id="name-${spk.speaker_id}" value="${escHtml(spk.name||'')}"
+              placeholder="Es. Daniela Demichelis"
+              oninput="onAliasChange('${spk.speaker_id}')" />
+          </div>
+          <div class="field-group">
+            <label>Azienda</label>
+            <input type="text" id="company-${spk.speaker_id}" value="${escHtml(spk.company||'')}"
+              placeholder="Es. Acme"
+              oninput="onAliasChange('${spk.speaker_id}')" />
+          </div>
+        </div>
+        ${suggs.length ? `
+        <div class="suggestions-list" style="margin-top:8px">
+          ${suggs.map(s=>`<span class="suggestion-pill" onclick="applySuggestion('${spk.speaker_id}','${escAttr(s.name)}','${escAttr(s.company||'')}')">${escHtml(s.name)}${s.company?` <span style="opacity:.6">· ${escHtml(s.company)}</span>`:''}</span>`).join('')}
+        </div>` : ''}
+      </div>`;
+    }).join('');
+
+    updateSaveButton();
+  }
+
+  async function loadTranscript() {
+    // Recupera l'URL del result.json da minutes_api, poi lo scarica da MinIO
+    try {
+      const resp = await fetch(`${MINUTES_BASE}/jobs/${jobId}/transcript-url`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const { url } = await resp.json();
+      if (!url) throw new Error('URL mancante');
+
+      const jsonResp = await fetch(url);
+      if (!jsonResp.ok) throw new Error(`MinIO HTTP ${jsonResp.status}`);
+      const data = await jsonResp.json();
+
+      transcriptSegments = data.segments || [];
+      renderTranscript();
+    } catch(e) {
+      console.warn('[speakers] Transcript load warning:', e.message);
+      // Mostra messaggio di errore non bloccante nel pannello trascrizione
+      const body = document.getElementById('transcript-body');
+      body.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:12px">
+        Impossibile caricare la trascrizione: ${escHtml(e.message)}
+      </div>`;
+    }
+  }
+
+  function fmtTime(sec) {
+    const s = Math.floor(sec);
+    const mm = Math.floor(s / 60).toString().padStart(2, '0');
+    const ss = (s % 60).toString().padStart(2, '0');
+    return `${mm}:${ss}`;
+  }
+
+  // Colori speaker — stessi della colonna sinistra
+  const SPK_COLORS = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#be185d','#65a30d'];
+  function spkColor(speakerId) {
+    const idx = speakersData.findIndex(s => s.speaker_id === speakerId);
+    return SPK_COLORS[(idx >= 0 ? idx : 0) % SPK_COLORS.length];
+  }
+
+  function renderTranscript() {
+    const body = document.getElementById('transcript-body');
+
+    if (!transcriptSegments.length) {
+      body.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:12px">Nessun segmento disponibile</div>`;
+      return;
+    }
+
+    // Raggruppa segmenti consecutivi dello stesso speaker in blocchi
+    const blocks = [];
+    let cur = null;
+    for (const seg of transcriptSegments) {
+      const spk = seg.speaker || 'UNKNOWN';
+      if (!cur || cur.speaker !== spk) {
+        cur = { speaker: spk, start: seg.start, end: seg.end, texts: [seg.text.trim()] };
+        blocks.push(cur);
+      } else {
+        cur.end = seg.end;
+        cur.texts.push(seg.text.trim());
+      }
+    }
+
+    body.innerHTML = blocks.map(block => {
+      const alias = currentAliases[block.speaker];
+      const label = alias
+        ? `${alias.name}${alias.company ? ` <span style="opacity:.55;font-weight:400">· ${escHtml(alias.company)}</span>` : ''}`
+        : escHtml(block.speaker);
+      const color = spkColor(block.speaker);
+      const text  = block.texts.join(' ').trim();
+
+      return `<div style="margin-bottom:16px">
+        <div class="transcript-speaker" style="color:${color};border-left:3px solid ${color}20;padding-left:8px;margin-bottom:4px">
+          <span class="transcript-time">${fmtTime(block.start)}</span>
+          ${label}
+        </div>
+        <div class="transcript-text" style="padding-left:11px">${escHtml(text)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function onAliasChange(speakerId) {
+    const name = document.getElementById(`name-${speakerId}`)?.value.trim() || '';
+    const company = document.getElementById(`company-${speakerId}`)?.value.trim() || '';
+    if (name) {
+      currentAliases[speakerId] = {name, company};
+      // Aggiorna card visually
+      const card = document.getElementById(`card-${speakerId}`);
+      if (card) card.classList.add('speaker-card-mapped');
+    } else {
+      delete currentAliases[speakerId];
+      const card = document.getElementById(`card-${speakerId}`);
+      if (card) card.classList.remove('speaker-card-mapped');
+    }
+    renderTranscript();
+    updateSaveButton();
+  }
+
+  function applySuggestion(speakerId, name, company) {
+    const nameEl = document.getElementById(`name-${speakerId}`);
+    const companyEl = document.getElementById(`company-${speakerId}`);
+    if (nameEl) nameEl.value = name;
+    if (companyEl) companyEl.value = company;
+    onAliasChange(speakerId);
+  }
+
+  function updateSaveButton() {
+    const hasAny = Object.keys(currentAliases).length > 0;
+    document.getElementById('btn-save').disabled = !hasAny;
+  }
+
+  async function saveSpeakers() {
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true;
+    btn.innerHTML = `<div class="spinner" style="display:block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .6s linear infinite"></div> Salvataggio…`;
+
+    const aliases = Object.entries(currentAliases).map(([speaker_id, info]) => ({
+      speaker_id, name: info.name, company: info.company || ""
+    }));
+
+    try {
+      const resp = await fetch(`${MINUTES_BASE}/jobs/${jobId}/speakers`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({aliases}),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Salvato`;
+      btn.style.background = 'var(--success)';
+      document.getElementById('btn-goto-minutes').style.display = 'inline-flex';
+      setTimeout(() => {
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Salva mapping`;
+        btn.style.background = '';
+        btn.disabled = false;
+      }, 2000);
+    } catch(e) {
+      alert(`Errore salvataggio: ${e.message}`);
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Salva mapping`;
+      btn.disabled = false;
+    }
+  }
+
+  function gotoMinutes() {
+    location.href = `minutes.html?job_id=${jobId}`;
+  }
+
+  function showLoading(on) {
+    document.getElementById('loading-state').style.display = on ? 'flex' : 'none';
+  }
+  function showError(msg) {
+    document.getElementById('error-state').style.display = 'block';
+    document.getElementById('error-msg').textContent = msg;
+    document.getElementById('loading-state').style.display = 'none';
+  }
+  function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function escAttr(s) { return String(s).replace(/'/g,"\\'"); }
+</script>
+</body>
+</html>

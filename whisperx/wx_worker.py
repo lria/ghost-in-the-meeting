@@ -129,8 +129,8 @@ def transcribe(model, wav_path: Path, language: str) -> tuple[list[dict], str]:
         str(wav_path),
         language=lang_param,
         beam_size=5,
-        word_timestamps=True,   # necessario per il merge con diarizzazione
-        vad_filter=True,        # filtra i silenzi, riduce allucinazioni
+        word_timestamps=True,
+        vad_filter=True,
         vad_parameters={"min_silence_duration_ms": 500},
     )
 
@@ -219,7 +219,7 @@ def run_job(job_id: str, fw_model, diar_pipeline):
     customer      = r.hget(k, "customer")      or "unknown"
     project       = r.hget(k, "project")       or "unknown"
     max_spk       = int(r.hget(k, "max_speakers") or 8)
-    output_format = r.hget(k, "output_format") or "both"  # json | txt | both
+    output_format = r.hget(k, "output_format") or "both"
 
     if not input_file or not Path(input_file).exists():
         update_job(job_id, status="FAILED", step="INPUT_CHECK", error="input_missing")
@@ -259,7 +259,6 @@ def run_job(job_id: str, fw_model, diar_pipeline):
             from pyannote.audio.pipelines.utils.hook import Hooks
 
             def _progress(step_name, step_artifact, file=None, total=None, completed=None):
-                """Hook real-time: stampa progresso e aggiorna Redis ad ogni step pyannote."""
                 if total and completed is not None and total > 0:
                     pct = int(completed / total * 100)
                     print(f"[worker] diarizzazione {step_name}: {pct}%", flush=True)
@@ -274,7 +273,6 @@ def run_job(job_id: str, fw_model, diar_pipeline):
             segments = merge_transcript_diarization(segments, diarization)
             print(f"[worker] diarizzazione completata", flush=True)
         except Exception as e:
-            # Diarizzazione fallita: prosegui senza speaker labels
             print(f"[worker] ⚠ diarizzazione fallita job {job_id}: {e}", flush=True)
             update_job(job_id, step="DIAR_SKIPPED_ERROR")
             segments = [{**s, "speaker": "UNKNOWN"} for s in segments]
@@ -294,7 +292,6 @@ def run_job(job_id: str, fw_model, diar_pipeline):
     s3 = s3_client()
     ensure_bucket(s3, MINIO_BUCKET)
 
-    # Cartella MinIO: customer/project/YYYYMMDD_HHMMSS_{job_id[:8]}/
     ts           = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     minio_folder = f"{ts}_{job_id[:8]}"
 
@@ -337,7 +334,7 @@ def run_job(job_id: str, fw_model, diar_pipeline):
         ]
         current_speaker = None
         prev_end        = 0.0
-        GAP_SEC         = 2.0  # nuovo blocco se gap > 2 sec (anche stesso speaker)
+        GAP_SEC         = 2.0
 
         for seg in segments:
             spk   = seg.get("speaker", "UNKNOWN")
@@ -407,7 +404,6 @@ def main():
     print(f"[worker] Avvio — redis={REDIS_URL} queue={QUEUE_KEY} "
           f"model={WHISPER_MODEL} device={WHISPER_DEVICE}", flush=True)
 
-    # Carica faster-whisper una volta
     print("[worker] Caricamento modello faster-whisper...", flush=True)
     fw_model = WhisperModel(
         WHISPER_MODEL,
@@ -416,7 +412,6 @@ def main():
     )
     print("[worker] Modello faster-whisper pronto.", flush=True)
 
-    # Carica pyannote una volta
     diar_pipeline = None
     if HF_TOKEN:
         try:
@@ -433,7 +428,6 @@ def main():
 
     recover_stale_jobs()
 
-    # Loop principale
     while True:
         item = r.blpop(QUEUE_KEY, timeout=BLPOP_TIMEOUT)
         if not item:

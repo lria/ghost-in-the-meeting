@@ -6,247 +6,38 @@
   <title>Minute — Audio Transcription</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:            #f8f9fb;
-      --surface:       #ffffff;
-      --surface-2:     #f3f4f6;
-      --border:        #e5e7eb;
-      --border-hover:  #d1d5db;
-      --text-primary:  #111827;
-      --text-secondary:#374151;
-      --text-muted:    #9ca3af;
-      --accent:        #2563eb;
-      --accent-light:  #eff6ff;
-      --success:       #16a34a;
-      --success-light: #dcfce7;
-      --warning:       #d97706;
-      --warning-light: #fef3c7;
-      --error:         #dc2626;
-      --error-light:   #fee2e2;
-      --radius:        10px;
-      --radius-sm:     6px;
-      --radius-lg:     14px;
-      --shadow-sm:     0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
-    }
-
-    html, body { height: 100%; }
-
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--bg);
-      color: var(--text-primary);
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    /* ── Shell ── */
-    .app-shell {
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-
-    /* ── Header ── */
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      padding: 0 28px;
-      gap: 12px;
-      height: 56px;
-      position: sticky; top: 0; z-index: 10;
+    /* ── Context menu ── */
+    .ctx-menu-wrap { position: relative; display: inline-flex; }
+    .ctx-btn {
+      background: none; border: none; cursor: pointer; padding: 4px 6px;
+      border-radius: var(--radius-sm); color: var(--text-muted);
+      display: grid; place-items: center; transition: background 0.12s, color 0.12s;
       flex-shrink: 0;
     }
-    .logo { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; letter-spacing: -0.02em; color: var(--text-primary); }
-    .logo-icon { width: 28px; height: 28px; background: var(--text-primary); border-radius: 8px; display: grid; place-items: center; }
-    .logo-icon svg { color: white; }
-    .header-badge { font-size: 11px; font-weight: 500; padding: 2px 8px; background: var(--accent-light); color: var(--accent); border-radius: 20px; letter-spacing: 0.01em; }
-    .header-stack { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-    .stack-pill { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); padding: 3px 8px; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 5px; }
-    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-hover); flex-shrink: 0; }
-    .dot.live { background: var(--success); box-shadow: 0 0 0 2px var(--success-light); }
-
-    /* ── Main 2-col grid ── */
-    main {
-      display: grid;
-      grid-template-columns: 460px 1fr;
-      gap: 24px;
-      padding: 28px;
-      max-width: 1200px;
-      width: 100%;
-      margin: 0 auto;
-      align-items: start;
-      flex: 1;
+    .ctx-btn:hover { background: var(--surface-2); color: var(--text-primary); }
+    .ctx-menu {
+      display: none; position: absolute; top: calc(100% + 4px); right: 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,.10);
+      min-width: 190px; z-index: 100; overflow: hidden;
     }
-
-    /* ── Panel ── */
-    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
-    .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
-    .panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-    .panel-subtitle { font-size: 11px; color: var(--text-muted); margin-left: 2px; }
-    .panel-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-
-    /* ── Form elements ── */
-    .field-group { display: flex; flex-direction: column; gap: 0; }
-    .field-group:not(:last-child) { margin-bottom: 0; }
-    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; letter-spacing: 0.01em; }
-    .req { display: inline-block; width: 4px; height: 4px; background: var(--accent); border-radius: 50%; margin-left: 4px; vertical-align: middle; transform: translateY(-1px); }
-    input[type=text], input[type=number], select, textarea {
-      width: 100%; padding: 8px 11px; background: var(--surface);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text-primary);
-      transition: border-color 0.15s, box-shadow 0.15s; outline: none;
+    .ctx-menu.open { display: block; }
+    .ctx-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 9px 14px; font-size: 13px; color: var(--text-secondary);
+      cursor: pointer; text-decoration: none; transition: background 0.1s;
+      border: none; background: none; width: 100%; text-align: left;
+      font-family: 'DM Sans', sans-serif;
     }
-    input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
-    textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
-    .hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
-
-    /* File drop */
-    .file-drop { position: relative; border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 20px 16px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--surface); }
-    .file-drop:hover, .file-drop.drag-over { border-color: var(--accent); background: var(--accent-light); }
-    .file-drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-    .file-drop-icon { width: 34px; height: 34px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; display: grid; place-items: center; margin: 0 auto 8px; }
-    .file-drop-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
-    .file-drop-label span { color: var(--accent); }
-    .file-drop-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
-    .file-selected { display: none; align-items: center; gap: 10px; background: var(--accent-light); border: 1px solid #bfdbfe; border-radius: var(--radius); padding: 9px 12px; margin-top: 8px; }
-    .file-selected.visible { display: flex; }
-    .file-selected-name { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent); font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-remove { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 2px; border-radius: 4px; display: grid; place-items: center; flex-shrink: 0; }
-
-    /* Toggle */
-    .toggle-field { display: flex; align-items: center; justify-content: space-between; padding: 10px 13px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
-    .toggle-info {}
-    .toggle-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
-    .toggle-desc { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
-    .toggle-switch { width: 34px; height: 20px; background: var(--border-hover); border-radius: 20px; position: relative; transition: background 0.2s; flex-shrink: 0; }
-    .toggle-switch::after { content:''; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; background: white; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
-    .toggle-switch.on { background: var(--accent); }
-    .toggle-switch.on::after { transform: translateX(14px); }
-
-    /* Submit */
-    .btn-submit { width: 100%; padding: 11px 20px; background: var(--text-primary); color: white; border: none; border-radius: var(--radius); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; letter-spacing: -0.01em; }
-    .btn-submit:hover { background: #1f2937; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.15); }
-    .btn-submit:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
-    .btn-submit .spinner { display: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite; }
-    .btn-submit.loading .spinner { display: block; }
-    .btn-submit.loading .btn-icon, .btn-submit.loading .btn-text { opacity: 0.7; }
-
-    /* ── Right panel internals ── */
-
-    /* Current section */
-    .current-section { padding: 16px 20px; }
-    .section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-    .section-label-text { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
-    .badge-new { background: var(--accent); color: white; font-size: 9px; font-weight: 700; padding: 1px 7px; border-radius: 20px; letter-spacing: 0.05em; animation: pulse-badge 1.5s ease-in-out infinite; }
-    @keyframes pulse-badge { 0%,100%{opacity:1} 50%{opacity:0.55} }
-
-    .job-title { font-size: 13px; font-weight: 600; color: var(--text-primary); line-height: 1.4; margin-bottom: 8px; }
-    .current-dates { display: flex; gap: 20px; margin: 12px 0 0; }
-    .date-item { display: flex; flex-direction: column; gap: 2px; }
-    .date-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-    .date-value { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-secondary); }
-
-    /* Progress */
-    .progress-section { padding: 14px 20px; border-top: 1px solid var(--border); }
-    .progress-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .progress-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
-    .step-chip { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; }
-    .progress-track { height: 5px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
-    .progress-fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.6s ease; }
-    .progress-fill.indeterminate { width: 40%; animation: indeterminate 1.4s ease-in-out infinite; }
-    @keyframes indeterminate { 0%{transform:translateX(-100%)} 100%{transform:translateX(350%)} }
-
-    /* Pipeline */
-    .pipeline-section { padding: 14px 20px; border-top: 1px solid var(--border); }
-    .section-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
-    .steps-list { display: flex; flex-direction: column; gap: 1px; }
-    .step-item { display: flex; align-items: center; gap: 11px; padding: 7px 9px; border-radius: var(--radius-sm); transition: background 0.1s; }
-    .step-item.done   { }
-    .step-item.active { background: var(--accent-light); }
-    .step-item.pending { opacity: 0.35; }
-    .step-icon { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
-    .done-i   { background: var(--success-light); }
-    .active-i { background: var(--accent-light); animation: pulse-icon 1.2s ease-in-out infinite; }
-    .pending-i { background: var(--surface-2); }
-    @keyframes pulse-icon { 0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.3)} 50%{box-shadow:0 0 0 4px rgba(37,99,235,.1)} }
-    .step-name { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
-    .step-item.active .step-name { color: var(--accent); font-weight: 600; }
-
-    /* Empty state */
-    .status-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 20px; text-align: center; }
-    .status-empty-icon { width: 50px; height: 50px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; display: grid; place-items: center; margin-bottom: 12px; }
-    .status-empty-title { font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; }
-    .status-empty-sub { font-size: 12px; color: var(--text-muted); }
-
-    /* Results */
-    .results-section { padding: 14px 20px; border-top: 1px solid var(--border); }
-    .result-link { display: flex; align-items: center; gap: 10px; padding: 10px 13px; border: 1px solid var(--border); border-radius: var(--radius); text-decoration: none; color: var(--text-primary); transition: all 0.15s; margin-bottom: 8px; background: var(--surface); }
-    .result-link:last-child { margin-bottom: 0; }
-    .result-link:hover { border-color: var(--accent); background: var(--accent-light); }
-    .result-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; }
-    .result-icon.json { background: #fff7ed; }
-    .result-icon.txt  { background: #f0fdf4; }
-    .result-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
-    .result-meta { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
-
-    /* Error */
-    .error-section { padding: 14px 20px; border-top: 1px solid var(--border); }
-    .error-box { background: var(--error-light); border: 1px solid #fecaca; border-radius: var(--radius); padding: 14px 16px; }
-    .error-title { font-size: 12px; font-weight: 600; color: var(--error); margin-bottom: 4px; }
-    .error-msg { font-family: 'DM Mono', monospace; font-size: 11px; color: #b91c1c; line-height: 1.5; }
-    .btn-retry { margin-top: 10px; padding: 5px 14px; background: var(--error); color: white; border: none; border-radius: var(--radius-sm); font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; }
-    .btn-retry:hover { background: #b91c1c; }
-
-    /* History */
-    .history-section { padding: 0 20px 16px; border-top: 1px solid var(--border); margin-top: 0; }
-    .history-header { padding: 14px 0 10px; }
-    .hist-row { border-radius: var(--radius); border: 1px solid transparent; overflow: hidden; margin-bottom: 4px; transition: border-color 0.12s; }
-    .hist-row.open { border-color: var(--border); }
-    .hist-row-header { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; border-radius: var(--radius); transition: background 0.12s; }
-    .hist-row-header:hover, .hist-row.open .hist-row-header { background: var(--surface-2); }
-    .hist-row-info { flex: 1; min-width: 0; }
-    .hist-row-name { font-size: 12px; font-weight: 500; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .hist-chevron { color: var(--text-muted); transition: transform 0.2s; flex-shrink: 0; }
-    .hist-row.open .hist-chevron { transform: rotate(90deg); }
-    .hist-accordion { display: none; padding: 4px 12px 12px; }
-    .hist-row.open .hist-accordion { display: block; }
-    .hist-meta { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
-    .hist-meta-row { display: flex; align-items: center; gap: 8px; }
-    .hist-meta-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; min-width: 72px; }
-    .hist-meta-value { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-secondary); }
-
-    /* Status badge */
-    .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; }
-    .status-badge .dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
-    .status-badge.pending   { background: var(--warning-light); color: var(--warning); }
-    .status-badge.pending .dot { background: var(--warning); }
-    .status-badge.working   { background: var(--accent-light);  color: var(--accent); }
-    .status-badge.working .dot { background: var(--accent); animation: pulse-dot 1s ease-in-out infinite; }
-    .status-badge.completed { background: var(--success-light); color: var(--success); }
-    .status-badge.completed .dot { background: var(--success); }
-    .status-badge.failed    { background: var(--error-light);   color: var(--error); }
-    .status-badge.failed .dot { background: var(--error); }
-    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-    /* Stream badge */
-    .stream-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; letter-spacing: 0.03em; }
-    .stream-live       { background: var(--success-light); color: var(--success); }
-    .stream-connecting { background: var(--warning-light); color: var(--warning); }
-    .stream-idle       { background: var(--surface-2);     color: var(--text-muted); }
-    .stream-error      { background: var(--error-light);   color: var(--error); }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    @media (max-width: 900px) {
-      main { grid-template-columns: 1fr; padding: 16px; }
-    }
-</style>
+    .ctx-item:hover { background: var(--surface-2); color: var(--text-primary); }
+    .ctx-item svg { flex-shrink: 0; }
+    .ctx-divider { height: 1px; background: var(--border); margin: 3px 0; }
+    .ctx-item.disabled { opacity: 0.4; cursor: not-allowed; }
+    .ctx-item.disabled:hover { background: none; color: var(--text-secondary); }
+    .ctx-badge { font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px; background: var(--warning-light); color: var(--warning); margin-left: auto; }
+  </style>
 </head>
 <body>
 <div class="app-shell">
@@ -266,10 +57,12 @@
     <div class="header-stack">
       <div class="stack-pill"><span class="dot" id="api-dot"></span>whisperx</div>
       <div class="stack-pill"><span class="dot" id="sse-dot"></span>sse broker</div>
+      <div class="stack-pill"><span class="dot" id="minutes-dot"></span>minutes</div>
     </div>
   </header>
 
   <main>
+    <!-- LEFT: Form -->
     <div class="panel">
       <div class="panel-header">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -280,8 +73,6 @@
         <span class="panel-subtitle">Upload · Configura · Invia</span>
       </div>
       <div class="panel-body">
-
-        <!-- File -->
         <div class="field-group">
           <label>File audio <span class="req"></span></label>
           <div class="file-drop" id="file-drop">
@@ -308,7 +99,6 @@
           </div>
         </div>
 
-        <!-- Cliente + Progetto -->
         <div class="field-row">
           <div class="field-group">
             <label>Cliente <span class="req"></span></label>
@@ -320,14 +110,12 @@
           </div>
         </div>
 
-        <!-- Partecipanti -->
         <div class="field-group">
           <label>Partecipanti</label>
           <textarea id="participants" placeholder="Uno per riga — es: Daniela Demichelis - IT"></textarea>
           <div class="hint">Separati da newline o punto e virgola</div>
         </div>
 
-        <!-- Lingua + Max speakers -->
         <div class="field-row">
           <div class="field-group">
             <label>Lingua</label>
@@ -343,7 +131,6 @@
           </div>
         </div>
 
-        <!-- Output format -->
         <div class="field-group">
           <label>Formato output</label>
           <select id="output_format">
@@ -353,7 +140,6 @@
           </select>
         </div>
 
-        <!-- Diarize -->
         <div class="field-group">
           <label>Diarizzazione</label>
           <div class="toggle-field" id="diarize-toggle">
@@ -374,13 +160,10 @@
           </svg>
           <span class="btn-text">Invia job</span>
         </button>
-
       </div>
     </div>
 
-    <!-- ── RIGHT: Status ── -->
-
-    <!-- ── RIGHT: Stato Trascrizioni ── -->
+    <!-- RIGHT: Status -->
     <div class="panel">
       <div class="panel-header">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -390,7 +173,6 @@
         <span class="stream-badge stream-idle" id="stream-status" style="margin-left:auto">In attesa</span>
       </div>
 
-      <!-- Empty state -->
       <div class="status-empty" id="status-empty">
         <div class="status-empty-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -411,17 +193,10 @@
           <div class="job-title" id="current-title">—</div>
           <div id="current-badge"></div>
           <div class="current-dates">
-            <div class="date-item">
-              <span class="date-label">Inizio</span>
-              <span class="date-value" id="current-created">—</span>
-            </div>
-            <div class="date-item">
-              <span class="date-label">Aggiornato</span>
-              <span class="date-value" id="current-updated">—</span>
-            </div>
+            <div class="date-item"><span class="date-label">Inizio</span><span class="date-value" id="current-created">—</span></div>
+            <div class="date-item"><span class="date-label">Aggiornato</span><span class="date-value" id="current-updated">—</span></div>
           </div>
         </div>
-
         <div class="progress-section">
           <div class="progress-header">
             <span class="progress-label">Avanzamento</span>
@@ -431,7 +206,6 @@
             <div class="progress-fill indeterminate" id="current-progress-fill"></div>
           </div>
         </div>
-
         <div class="pipeline-section">
           <div class="section-label">Pipeline</div>
           <div class="steps-list" id="current-steps-list"></div>
@@ -447,40 +221,35 @@
           <div id="history-container"></div>
         </div>
       </div>
-
     </div>
   </main>
 
 </div>
+
+<!-- Context menu overlay click-away -->
+<div id="ctx-overlay" style="display:none;position:fixed;inset:0;z-index:99" onclick="closeAllCtx()"></div>
+
 <script>
+  const API_BASE    = "http://localhost:9200";
+  const N8N_INGEST  = "http://localhost:5678/webhook/minute/ingest";
+  const SSE_BASE    = "http://localhost:9400";
+  const MINUTES_BASE = "http://localhost:9500";
 
-
-  const API_BASE   = "http://localhost:9200";
-  const N8N_INGEST = "http://localhost:5678/webhook/minute/ingest";
-  const SSE_BASE   = "http://localhost:9400";
-
-  let diarize     = true;
-  let eventSource = null;
-  let jobsMap     = {};
-  let openHistId  = null;
+  let diarize = true, eventSource = null, jobsMap = {}, openHistId = null;
 
   const PIPELINE = [
-    { key: "ENQUEUED",     label: "In coda" },
-    { key: "REQUEUED",     label: "Riaccodato" },
-    { key: "DOWNLOADING",  label: "Download" },
-    { key: "TRANSCRIBING", label: "Trascrizione" },
-    { key: "DIARIZING",    label: "Diarizzazione" },
-    { key: "FORMATTING",   label: "Formattazione" },
-    { key: "UPLOADING",    label: "Upload MinIO" },
-    { key: "COMPLETED",    label: "Completato" },
+    {key:"ENQUEUED",label:"In coda"},
+    {key:"REQUEUED",label:"Riaccodato"},
+    {key:"DOWNLOADING",label:"Download"},
+    {key:"TRANSCRIBING",label:"Trascrizione"},
+    {key:"DIARIZING",label:"Diarizzazione"},
+    {key:"FORMATTING",label:"Formattazione"},
+    {key:"UPLOADING",label:"Upload MinIO"},
+    {key:"COMPLETED",label:"Completato"},
   ];
-  const TERMINAL = ["COMPLETED", "FAILED"];
+  const TERMINAL = ["COMPLETED","FAILED"];
   const $ = id => document.getElementById(id);
-
-  const fmt = iso => {
-    try { return new Date(iso).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
-    catch { return iso || '—'; }
-  };
+  const fmt = iso => { try { return new Date(iso).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return iso||'—'; } };
   const jobTitle = job => `${job.customer||'?'} — ${job.project||'?'} — del ${fmt(job.created_at)}`;
 
   window.addEventListener('load', async () => {
@@ -492,12 +261,12 @@
   async function checkHealth() {
     try { const r = await fetch(`${API_BASE}/health`,{signal:AbortSignal.timeout(3000)}); $('api-dot').className=r.ok?'dot live':'dot'; } catch { $('api-dot').className='dot'; }
     try { const r = await fetch(`${SSE_BASE}/health`,{signal:AbortSignal.timeout(3000)}); $('sse-dot').className=r.ok?'dot live':'dot'; } catch { $('sse-dot').className='dot'; }
+    try { const r = await fetch(`${MINUTES_BASE}/health`,{signal:AbortSignal.timeout(3000)}); $('minutes-dot').className=r.ok?'dot live':'dot'; } catch { $('minutes-dot').className='dot'; }
   }
 
   async function loadInitialJobs() {
     try {
-      const r = await fetch(`${SSE_BASE}/jobs`);
-      if (!r.ok) return;
+      const r = await fetch(`${SSE_BASE}/jobs`); if(!r.ok) return;
       const data = await r.json();
       for (const job of data.jobs) jobsMap[job.job_id] = job;
       renderAll();
@@ -515,7 +284,7 @@
   }
 
   function setStreamStatus(state) {
-    const map={connecting:['stream-connecting','Connessione\u2026'],connected:['stream-live','Live'],idle:['stream-idle','In attesa'],error:['stream-error','Disconnesso']};
+    const map={connecting:['stream-connecting','Connessione…'],connected:['stream-live','Live'],idle:['stream-idle','In attesa'],error:['stream-error','Disconnesso']};
     const [cls,txt]=map[state]??map.idle;
     const el=$('stream-status'); el.className='stream-badge '+cls; el.textContent=txt;
   }
@@ -525,19 +294,13 @@
     const active = all.filter(j=>!TERMINAL.includes(j.status));
     const done   = all.filter(j=> TERMINAL.includes(j.status));
     const current = active.find(j=>j.status==='WORKING') ?? active[0] ?? null;
-    const queued  = active.filter(j=>j!==current);
-    renderCurrent(current, queued.length>0);
+    renderCurrent(current, active.filter(j=>j!==current).length>0);
     renderHistory(done);
   }
 
   function renderCurrent(job, hasQueued) {
-    if (!job) {
-      $('status-empty').style.display='flex';
-      $('current-job').style.display='none';
-      return;
-    }
-    $('status-empty').style.display='none';
-    $('current-job').style.display='block';
+    if (!job) { $('status-empty').style.display='flex'; $('current-job').style.display='none'; return; }
+    $('status-empty').style.display='none'; $('current-job').style.display='block';
     $('badge-new').style.display=hasQueued?'inline-block':'none';
     $('current-title').textContent=jobTitle(job);
     $('current-badge').innerHTML=badgeHtml(job.status);
@@ -558,57 +321,109 @@
     $('history-container').innerHTML=jobs.map(job=>{
       const isOpen=openHistId===job.job_id;
       const isFailed=job.status==='FAILED';
+      const isCompleted=job.status==='COMPLETED';
       let body=`<div class="hist-meta">
         <div class="hist-meta-row"><span class="hist-meta-label">Data</span><span class="hist-meta-value">${fmt(job.created_at)}</span></div>
         ${job.updated_at?`<div class="hist-meta-row"><span class="hist-meta-label">Fine</span><span class="hist-meta-value">${fmt(job.updated_at)}</span></div>`:''}
         <div class="hist-meta-row"><span class="hist-meta-label">Stato</span><span class="hist-meta-value">${badgeHtml(job.status)}</span></div>
       </div>`;
-      if(!isFailed&&(job.output_json_url||job.output_txt_url)){
+      if(isCompleted&&(job.output_json_url||job.output_txt_url)){
         body+=`<div>${job.output_json_url?resultLink(job.output_json_url,'json'):''}${job.output_txt_url?resultLink(job.output_txt_url,'txt'):''}</div>`;
       }
       if(isFailed){
-        body+=`<div class="error-box" style="margin-top:8px"><div class="error-title">Job fallito</div><div class="error-msg">${job.error||'Errore sconosciuto'}</div><button class="btn-retry retry-hist-btn" data-job-id="${job.job_id}">\u21BA Riprova</button></div>`;
+        body+=`<div class="error-box" style="margin-top:8px"><div class="error-title">Job fallito</div><div class="error-msg">${job.error||'Errore sconosciuto'}</div></div>`;
       }
       return `<div class="hist-row ${isOpen?'open':''}" data-job-id="${job.job_id}">
         <div class="hist-row-header">
-          <div class="hist-row-info"><span class="hist-row-name">${jobTitle(job)}</span></div>
-          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div class="hist-row-info" style="cursor:pointer" onclick="toggleHist('${job.job_id}')">
+            <span class="hist-row-name">${jobTitle(job)}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
             ${badgeHtml(job.status)}
-            <svg class="hist-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            ${isCompleted ? ctxMenuHtml(job) : ''}
+            <svg class="hist-chevron" style="cursor:pointer" onclick="toggleHist('${job.job_id}')" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
         <div class="hist-accordion">${body}</div>
       </div>`;
     }).join('');
-    $('history-container').querySelectorAll('.hist-row-header').forEach(el=>{
-      el.addEventListener('click',()=>{
-        const id=el.closest('.hist-row').dataset.jobId;
-        openHistId=openHistId===id?null:id;
-        renderAll();
-      });
-    });
-    $('history-container').querySelectorAll('.retry-hist-btn').forEach(btn=>{
-      btn.addEventListener('click',async e=>{
-        e.stopPropagation();
-        try{await fetch(`${API_BASE}/jobs/${btn.dataset.jobId}/retry`,{method:'POST'});connectStream();}
-        catch(err){alert('Retry fallito: '+err.message);}
-      });
-    });
   }
 
-  function pipelineHtml(currentStep,status) {
-    const activeIdx=PIPELINE.findIndex(s=>(currentStep??'').toUpperCase().startsWith(s.key));
+  function ctxMenuHtml(job) {
+    return `<div class="ctx-menu-wrap">
+      <button class="ctx-btn" onclick="toggleCtx(event,'${job.job_id}')" title="Azioni">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+        </svg>
+      </button>
+      <div class="ctx-menu" id="ctx-${job.job_id}">
+        <a class="ctx-item" href="speakers.html?job_id=${job.job_id}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Associa Speaker
+        </a>
+        <a class="ctx-item" href="minutes.html?job_id=${job.job_id}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          Genera Minuta
+        </a>
+        <div class="ctx-divider"></div>
+        ${job.output_json_url?`<a class="ctx-item" href="${job.output_json_url}" target="_blank" rel="noopener">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Scarica JSON
+        </a>`:''}
+        ${job.output_txt_url?`<a class="ctx-item" href="${job.output_txt_url}" target="_blank" rel="noopener">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Scarica TXT
+        </a>`:''}
+      </div>
+    </div>`;
+  }
+
+  function toggleCtx(e, jobId) {
+    e.stopPropagation();
+    const menu = document.getElementById(`ctx-${jobId}`);
+    const isOpen = menu.classList.contains('open');
+    closeAllCtx();
+    if (!isOpen) {
+      menu.classList.add('open');
+      $('ctx-overlay').style.display = 'block';
+    }
+  }
+  function closeAllCtx() {
+    document.querySelectorAll('.ctx-menu.open').forEach(m => m.classList.remove('open'));
+    $('ctx-overlay').style.display = 'none';
+  }
+  function toggleHist(id) { openHistId = openHistId === id ? null : id; renderAll(); }
+
+  function pipelineHtml(currentStep, status) {
+    const activeIdx = PIPELINE.findIndex(s=>(currentStep??'').toUpperCase().startsWith(s.key));
     return PIPELINE.map((s,i)=>{
-      let state='pending';
+      let state = 'pending';
       if(status==='COMPLETED') state='done';
-      else if(i<activeIdx)     state='done';
-      else if(i===activeIdx)   state='active';
-      const icon=state==='done'
+      else if(i<activeIdx) state='done';
+      else if(i===activeIdx) state='active';
+      const icon = state==='done'
         ?`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
         :state==='active'
           ?`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5"><circle cx="12" cy="12" r="4" fill="var(--accent)"/></svg>`
           :`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--border-hover)" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>`;
-      const ic=state==='done'?'done-i':state==='active'?'active-i':'pending-i';
+      const ic = state==='done'?'done-i':state==='active'?'active-i':'pending-i';
       return `<div class="step-item ${state}"><div class="step-icon ${ic}">${icon}</div><span class="step-name">${s.label}</span></div>`;
     }).join('');
   }
@@ -619,23 +434,23 @@
     return `<span class="status-badge ${cls}"><span class="dot"></span>${lbl}</span>`;
   }
 
-  function calcPercent(step,status) {
+  function calcPercent(step, status) {
     if(status==='COMPLETED') return 100;
-    if(status==='FAILED')    return null;
+    if(status==='FAILED') return null;
     const m=(step??'').match(/(\d+)pct/i); if(m) return parseInt(m[1]);
     const idx=PIPELINE.findIndex(s=>(step??'').toUpperCase().startsWith(s.key));
     if(idx>=0) return Math.round(((idx+0.5)/PIPELINE.length)*100);
     return null;
   }
 
-  function resultLink(url,type) {
+  function resultLink(url, type) {
     const isJson=type==='json';
     const col=isJson?'#c2410c':'#15803d';
     const label=isJson?'result.json':'result.txt';
     const meta=isJson?'Trascrizione strutturata':'Testo semplice';
     return `<a class="result-link" href="${url}" target="_blank" rel="noopener">
       <div class="result-icon ${type}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-      <div><div class="result-name">${label}</div><div class="result-meta">${meta} &middot; MinIO</div></div>
+      <div><div class="result-name">${label}</div><div class="result-meta">${meta} · MinIO</div></div>
       <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
     </a>`;
   }
@@ -672,8 +487,6 @@
   });
 
   function setLoading(on){submitBtn.disabled=on;submitBtn.classList.toggle('loading',on);}
-
-
 </script>
 </body>
 </html>
