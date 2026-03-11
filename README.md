@@ -38,8 +38,11 @@ n8n (port 5678)
     │
     ▼
 whisperx_api          (FastAPI — port 9200)
-    │  POST /jobs      → saves audio to disk, enqueues job on Redis
-    │  GET  /jobs/:id  → polls status + returns output URLs
+    │  POST /jobs           → saves audio to disk, enqueues job on Redis
+    │  GET  /jobs/:id       → polls status + returns output URLs
+    │  POST /jobs/:id/pause → suspends job (worker skips it on dequeue)
+    │  POST /jobs/:id/resume→ re-enqueues a paused job
+    │  DELETE /jobs/:id     → deletes job resources (4 scopes)
     │
     ▼ Redis queue (wx:queue)
     │
@@ -53,6 +56,7 @@ whisperx_worker
 
 whisperx_cleanup       (runs every hour)
     └── deletes local temp files for COMPLETED/FAILED jobs
+        never touches PAUSED jobs (audio needed for resume)
 
 sse_broker             (FastAPI — port 9400)
     └── polls Redis every 2s → pushes job deltas to browser via SSE
@@ -102,7 +106,13 @@ TZ=Europe/Rome
 docker compose up -d
 ```
 
-**4. Make MinIO bucket publicly readable**
+**4. Run database migrations**
+```bash
+docker exec -i n8n_stack_postgres psql -U n8n -d n8n < postgres_init/003_add_paused_status.sql
+docker exec -i n8n_stack_postgres psql -U n8n -d n8n < postgres_init/004_add_deleted_status.sql
+```
+
+**5. Make MinIO bucket publicly readable**
 ```bash
 docker exec n8n_stack_minio sh -c '
   mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD &&
@@ -110,7 +120,7 @@ docker exec n8n_stack_minio sh -c '
 '
 ```
 
-**5. First run** — build takes ~10 minutes (downloads PyTorch + pyannote models)
+**6. First run** — build takes ~10 minutes (downloads PyTorch + pyannote models)
 
 ---
 
@@ -121,8 +131,8 @@ Open `http://localhost:8081` in your browser.
 **Left column — Nuova Trascrizione:** drag-and-drop audio upload, customer/project metadata, language, speaker count, output format, diarization toggle.
 
 **Right column — Stato Trascrizioni:**
-- **Trascrizione Corrente**: live progress with animated pipeline steps, start/updated timestamps, "IN CODA" badge when jobs are queued
-- **Storico Trascrizioni**: accordion list of completed/failed jobs with download links
+- **Trascrizione Corrente**: live progress bar with %, animated pipeline steps, **Sospendi** and **Elimina** buttons
+- **Storico Trascrizioni**: accordion list of completed/failed/deleted jobs with download links, inline actions (Associa Speaker, Genera Minuta, Riprova, Elimina)
 
 ---
 
@@ -177,10 +187,7 @@ curl http://localhost:9200/jobs/d87b69740f634fd28ad1d5dda935e963
 
 **While processing:**
 ```json
-{
-  "status": "WORKING",
-  "step": "DIARIZING_EMBEDDINGS_42pct"
-}
+{ "status": "WORKING", "step": "DIARIZING_EMBEDDINGS_42pct" }
 ```
 
 **When completed:**
@@ -193,6 +200,41 @@ curl http://localhost:9200/jobs/d87b69740f634fd28ad1d5dda935e963
   "finished_at": "2026-03-07T17:30:00Z"
 }
 ```
+
+---
+
+### `POST /jobs/{job_id}/pause` — Suspend a job
+
+```bash
+curl -X POST http://localhost:9200/jobs/d87b69740f634fd28ad1d5dda935e963/pause
+```
+
+Sets `status=PAUSED`. The worker skips paused jobs on dequeue. The audio file is preserved on disk for resume.
+
+---
+
+### `POST /jobs/{job_id}/resume` — Resume a paused job
+
+```bash
+curl -X POST http://localhost:9200/jobs/d87b69740f634fd28ad1d5dda935e963/resume
+```
+
+Sets `status=PENDING` and re-enqueues the job. Returns `410` if the audio file was already cleaned up.
+
+---
+
+### `DELETE /jobs/{job_id}?scope=` — Delete job resources
+
+```bash
+curl -X DELETE "http://localhost:9200/jobs/d87b69740f634fd28ad1d5dda935e963?scope=transcript"
+```
+
+| scope | What it deletes |
+|---|---|
+| `audio` | Audio file from MinIO + local disk |
+| `transcript` | Audio + JSON/TXT from MinIO |
+| `rag` | Transcript + Qdrant chunks + `speaker_aliases` + `minutes_jobs` → sets `status=DELETED` |
+| `purge` | Removes job completely from Redis + PostgreSQL (only on `DELETED` jobs) |
 
 ---
 
@@ -300,7 +342,7 @@ Buongiorno a tutti, iniziamo la riunione. Grazie. Come dicevo...
 The `whisperx_cleanup` service runs periodically and deletes temporary files
 on disk (input audio + local output) for jobs already uploaded to MinIO.
 
-- **`WORKING` / `PENDING` jobs are never touched**, regardless of age
+- **`WORKING` / `PENDING` / `PAUSED` jobs are never touched**, regardless of age
 - Configurable via environment variables in `docker-compose.yml`:
 
 | Variable | Default | Description |
@@ -370,7 +412,10 @@ docker exec n8n_stack_minio sh -c '
 - [x] Cleanup worker for temporary files
 - [x] Human-readable MinIO folder naming
 - [x] SSE broker for real-time browser updates
-- [x] Web UI with live job status
+- [x] Web UI with live job status and pipeline steps
+- [x] Pause / Resume jobs
+- [x] Delete job resources (4 scopes: audio / transcript / rag / purge)
+- [x] DELETED status — soft delete with metadata retention
 - [ ] Speaker rename (participants → SPEAKER_00 mapping)
 - [ ] RAG indexing of transcripts into Qdrant
 - [ ] Minute generation via Ollama

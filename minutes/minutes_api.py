@@ -159,8 +159,10 @@ def get_job_speakers_from_redis(job_id: str) -> list[str]:
         client = s3()
         obj = client.get_object(Bucket=bucket, Key=key)
         data = json.loads(obj["Body"].read())
-        speakers = list({seg.get("speaker", "UNKNOWN") for seg in data.get("segments", [])})
-        return sorted([s for s in speakers if s != "UNKNOWN"])
+        speakers = list({seg.get("speaker", "UNKNOWN_x") for seg in data.get("segments", [])})
+        known   = sorted([s for s in speakers if not s.startswith("UNKNOWN")])
+        unknown = sorted([s for s in speakers if s.startswith("UNKNOWN")])
+        return known + unknown
     except Exception as e:
         print(f"[minutes] ⚠ get_job_speakers warning: {e}", flush=True)
         return []
@@ -578,9 +580,7 @@ async def get_speakers(job_id: str):
     # Statistiche per speaker: N segmenti, durata totale
     stats: dict[str, dict] = {}
     for seg in segments:
-        spk = seg.get("speaker", "UNKNOWN")
-        if spk == "UNKNOWN":
-            continue
+        spk = seg.get("speaker", "UNKNOWN_x")
         if spk not in stats:
             stats[spk] = {"segments": 0, "duration_sec": 0.0}
         stats[spk]["segments"] += 1

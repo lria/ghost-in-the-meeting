@@ -1,3 +1,70 @@
+## [2026-03-11] — Delete job (4 scope) + Pause/Resume + UI v3
+
+### New features
+
+#### DELETE `/jobs/{job_id}?scope=` — 4-scope delete (`wx_api.py`)
+New endpoint to progressively delete job resources:
+
+| scope | What it deletes |
+|---|---|
+| `audio` | Audio file from MinIO + local disk |
+| `transcript` | Audio + JSON/TXT from MinIO |
+| `rag` | Transcript + Qdrant chunks + `speaker_aliases` + `minutes_jobs` → sets `status=DELETED` |
+| `purge` | Removes job completely from Redis + PostgreSQL (only allowed on `DELETED` jobs) |
+
+Error handling: wrapped in try/except to always return JSON (prevents silent crash → "Load failed" in browser).
+
+#### `DELETED` job status — `wx_api.py` + `004_add_deleted_status.sql`
+Jobs deleted with `scope=rag` remain visible in the history panel with metadata only (no file links).
+New migration adds `DELETED` value to `transcription_status` enum.
+
+#### Pause/Resume jobs — `wx_api.py` + `wx_worker.py` + `wx_cleanup.py`
+- `POST /jobs/{job_id}/pause` — sets `status=PAUSED`, worker skips paused jobs on dequeue
+- `POST /jobs/{job_id}/resume` — sets `status=PENDING`, re-enqueues to Redis queue
+- Cleanup worker never touches `PAUSED` jobs (audio file required for resume)
+- Resume requires audio file on disk; returns HTTP 410 if already cleaned up
+
+#### Transcription progress % — `wx_worker.py`
+Worker now emits granular step labels during diarization (e.g. `DIARIZING_EMBEDDINGS_42pct`).
+UI parses these to show a real progress bar percentage instead of indeterminate animation.
+
+---
+
+### UI — Web UI v3 (`webform/index.html`)
+
+#### Delete overlay popup
+Click on **Elimina** opens a centered modal overlay with scope options:
+- Jobs `COMPLETED/FAILED/PAUSED`: 3 options — *Cancella audio*, *Cancella trascrizione*, *Cancella tutto (mantieni storico)*
+- Jobs `DELETED`: single option — *Elimina definitivamente* (purge)
+
+After each action, `jobsMap` is updated locally without full page reload.
+
+#### Status badges
+Added `DELETED` (grey), `PAUSED` (purple) badges to `badgeHtml()`.
+
+#### Sospendi / Riprendi buttons
+- Active job panel shows **Sospendi** (pause icon) and **Elimina** buttons
+- Paused job panel shows a purple "Trascrizione sospesa" box + **Riprendi** + **Elimina** buttons
+- Button label restored on resume error (no stuck disabled state)
+
+#### History accordion — removed `...` context menu
+Replaced with inline `btn-action` buttons inside the accordion body:
+- `COMPLETED`: **Associa Speaker** + **Genera Minuta**
+- `FAILED`: **Riprova** (retry)
+- `DELETED`: grey info box + **Elimina definitivamente**
+
+---
+
+### Database
+
+#### `003_add_paused_status.sql` _(new)_
+Adds `PAUSED` to `transcription_status` enum + `paused_at timestamptz` column on `wx_transcription_jobs`.
+
+#### `004_add_deleted_status.sql` _(new)_
+Adds `DELETED` to `transcription_status` enum. Idempotent.
+
+---
+
 ## [2026-03-09] — SSE Broker + Web UI v2
 
 ### New services

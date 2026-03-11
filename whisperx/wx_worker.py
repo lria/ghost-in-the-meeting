@@ -114,15 +114,6 @@ def is_stop_requested(job_id: str) -> bool:
 
 
 class StopRequested(Exception):
-    """Sollevata quando il worker rileva una richiesta di stop."""
-    pass
-
-def is_stop_requested(job_id: str) -> bool:
-    """Ritorna True se l'API ha settato stop_requested=1 su Redis."""
-    return r.hget(job_key(job_id), "stop_requested") == "1"
-
-
-class StopRequested(Exception):
     """Sollevata dal worker quando rileva una richiesta di stop."""
     pass
 
@@ -131,7 +122,7 @@ def ffmpeg_to_wav(src: Path, dst: Path):
     """Converte qualsiasi formato audio/video in WAV mono 16kHz."""
     cmd = ["ffmpeg", "-y", "-i", str(src),
            "-ac", "1", "-ar", "16000", "-vn", str(dst)]
-    subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) 
+    subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # ── Trascrizione con faster-whisper ──────────────────────────────────────────
@@ -200,15 +191,23 @@ def transcribe(model, wav_path: Path, language: str,
 def merge_transcript_diarization(segments: list[dict], diarization) -> list[dict]:
     """
     Assegna lo speaker label a ogni segmento trascritto.
-    Strategia: per ogni segmento prende lo speaker pyannote con cui
-    ha la maggiore sovrapposizione temporale.
-    Se nessuna sovrapposizione → UNKNOWN.
+
+    Passo 1 — Overlap: assegna lo speaker pyannote con overlap maggiore.
+    Passo 2 — Proximity fill: i segmenti senza overlap (None) vengono
+              assegnati allo speaker del segmento noto più vicino
+              temporalmente (precedente o successivo).
+              Solo se non esiste nessun vicino noto → UNKNOWN_N.
+
+    Questa strategia elimina i frammenti UNKNOWN che sono bordi di turno
+    (inizio/fine frase) che pyannote non riesce ad assegnare per via delle
+    soglie interne di segmentazione.
     """
-    merged = []
+    # ── Passo 1: overlap ──────────────────────────────────────────────────
+    raw = []
     for seg in segments:
         seg_start    = seg["start"]
         seg_end      = seg["end"]
-        best_speaker = "UNKNOWN"
+        best_speaker = None
         best_overlap = 0.0
 
         for turn, _, speaker in diarization.itertracks(yield_label=True):
@@ -217,7 +216,67 @@ def merge_transcript_diarization(segments: list[dict], diarization) -> list[dict
                 best_overlap = overlap
                 best_speaker = speaker
 
-        merged.append({**seg, "speaker": best_speaker})
+        raw.append({**seg, "speaker": best_speaker})
+
+    # ── Passo 2: proximity fill ───────────────────────────────────────────
+    # Per ogni segmento None, cerca il vicino noto più prossimo (per tempo).
+    # Usa il punto centrale del segmento come riferimento.
+    n = len(raw)
+    filled = list(raw)  # copia
+
+    for i, seg in enumerate(raw):
+        if seg["speaker"] is not None:
+            continue
+
+        mid = (seg["start"] + seg["end"]) / 2.0
+
+        # Cerca il precedente con speaker noto
+        prev_spk  = None
+        prev_dist = float("inf")
+        for j in range(i - 1, -1, -1):
+            if raw[j]["speaker"] is not None:
+                prev_spk  = raw[j]["speaker"]
+                prev_dist = mid - raw[j]["end"]
+                break
+
+        # Cerca il successivo con speaker noto
+        next_spk  = None
+        next_dist = float("inf")
+        for j in range(i + 1, n):
+            if raw[j]["speaker"] is not None:
+                next_spk  = raw[j]["speaker"]
+                next_dist = raw[j]["start"] - mid
+                break
+
+        if prev_spk is None and next_spk is None:
+            # Nessun vicino noto → resta None, verrà etichettato UNKNOWN_N
+            pass
+        elif prev_spk is None:
+            filled[i] = {**seg, "speaker": next_spk}
+        elif next_spk is None:
+            filled[i] = {**seg, "speaker": prev_spk}
+        else:
+            # Prende il più vicino; in caso di parità preferisce il precedente
+            filled[i] = {**seg, "speaker": prev_spk if prev_dist <= next_dist else next_spk}
+
+    # ── Passo 3: residui → UNKNOWN_N distinti ────────────────────────────
+    # Dovrebbero essere pochissimi (solo segmenti isolati senza vicini noti).
+    unknown_counter = 0
+    current_unknown = None
+    prev_known      = True
+
+    merged = []
+    for seg in filled:
+        if seg["speaker"] is not None:
+            prev_known      = True
+            current_unknown = None
+            merged.append(seg)
+        else:
+            if prev_known or current_unknown is None:
+                current_unknown = f"UNKNOWN_{unknown_counter}"
+                unknown_counter += 1
+                prev_known = False
+            merged.append({**seg, "speaker": current_unknown})
 
     return merged
 
@@ -275,6 +334,14 @@ def _pause_job(job_id: str, step: str):
 
 def run_job(job_id: str, fw_model, diar_pipeline):
     k          = job_key(job_id)
+
+    # Guard: ignora job che nel frattempo sono stati messi in PAUSED
+    # (es. pause richiesta mentre era ancora in coda)
+    current_status = r.hget(k, "status") or ""
+    if current_status == "PAUSED":
+        print(f"[worker] job {job_id} è PAUSED, salto", flush=True)
+        return
+
     input_file = r.hget(k, "input_file")
     language      = r.hget(k, "language")      or "it"
     diarize       = r.hget(k, "diarize")       or "true"
@@ -514,6 +581,32 @@ def main():
                 "pyannote/speaker-diarization-3.1",
                 use_auth_token=HF_TOKEN,
             )
+            # Stampa parametri attuali — utile per tuning soglie UNKNOWN
+            try:
+                print("[worker] Parametri pipeline diarizzazione:", flush=True)
+                for k, v in diar_pipeline.parameters(instantiated=True).items():
+                    print(f"[worker]   {k} = {v}", flush=True)
+            except Exception:
+                pass
+            # Tuning soglie diarizzazione per ridurre segmenti UNKNOWN
+            # threshold: distanza massima per unire segmenti allo stesso speaker
+            #   default 0.7045 → abbassare a 0.60 unisce più segmenti vicini
+            # min_cluster_size: frame minimi per formare un cluster speaker
+            #   default 12 → abbassare a 6 include segmenti brevi
+            try:
+                diar_pipeline.segmentation.min_duration_on  = 0.0
+                diar_pipeline.segmentation.min_duration_off = 0.0
+                diar_pipeline._clustering.threshold         = float(os.getenv("PYANNOTE_THRESHOLD",       "0.60"))
+                diar_pipeline._clustering.min_cluster_size  = int(os.getenv("PYANNOTE_MIN_CLUSTER_SIZE", "6"))
+                print(
+                    f"[worker] Soglie diarizzazione: "
+                    f"threshold={diar_pipeline._clustering.threshold}, "
+                    f"min_cluster_size={diar_pipeline._clustering.min_cluster_size}, "
+                    f"min_duration_on=0.0, min_duration_off=0.0",
+                    flush=True
+                )
+            except Exception as e:
+                print(f"[worker] ⚠ Tuning soglie non applicato: {e}", flush=True)
             print("[worker] Pipeline diarizzazione pronta.", flush=True)
         except Exception as e:
             print(f"[worker] ⚠ Diarizzazione non disponibile: {e}", flush=True)

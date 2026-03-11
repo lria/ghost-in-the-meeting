@@ -383,8 +383,10 @@
     }
 
     container.innerHTML = data.speakers.map((spk, i) => {
-      const initials = spk.speaker_id.replace('SPEAKER_','S');
-      const color = colors[i % colors.length];
+      const isUnknown = spk.speaker_id.startsWith('UNKNOWN');
+      const unknownIdx = isUnknown ? spk.speaker_id.replace('UNKNOWN_','') : null;
+      const initials = isUnknown ? '?' : spk.speaker_id.replace('SPEAKER_','S');
+      const color = isUnknown ? '#9ca3af' : colors[i % colors.length];
       const mapped = !!spk.name;
       const mins = Math.floor(spk.duration_sec / 60);
       const secs = Math.round(spk.duration_sec % 60);
@@ -441,6 +443,7 @@
           <div style="flex:1">
             <div class="speaker-id">${spk.speaker_id}</div>
             <div class="speaker-stats">${spk.segments} interventi · ${duration}</div>
+            ${isUnknown ? '<div style="font-size:10px;color:#d97706;margin-top:2px;display:flex;align-items:center;gap:4px"><svg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\'/><line x1=\'12\' y1=\'9\' x2=\'12\' y2=\'13\'/><line x1=\'12\' y1=\'17\' x2=\'12.01\' y2=\'17\'/></svg>Segmenti non assegnati dalla diarizzazione</div>' : ''}
           </div>
           ${playBtn}
           ${mapped?`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:''}
@@ -450,7 +453,7 @@
           <div class="field-group">
             <label>Nome</label>
             <input type="text" id="name-${spk.speaker_id}" value="${escHtml(spk.name||'')}"
-              placeholder="Es. Daniela Demichelis"
+              placeholder="${isUnknown ? 'Es. Voce esterna' : 'Es. Daniela Demichelis'}"
               oninput="onAliasChange('${spk.speaker_id}')" />
           </div>
           <div class="field-group">
