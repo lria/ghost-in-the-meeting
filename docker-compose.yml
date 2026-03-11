@@ -195,12 +195,14 @@ services:
       - ./data/nltk_data:/usr/local/share/nltk_data
       - ./whisperx/wx_worker.py:/app/wx_worker.py:ro
     depends_on:
-      - redis:
+      redis:
+        condition: service_started
+      postgres:
         condition: service_healthy
-      - postgres
-      - minio
-      - whisperx_api
-
+      minio:
+        condition: service_started
+      whisperx_api:
+        condition: service_started
 
   # ── WhisperX Cleanup Worker ───────────────────────────────────────────────
   # Cancella periodicamente i file temporanei su disco (input + output locale)

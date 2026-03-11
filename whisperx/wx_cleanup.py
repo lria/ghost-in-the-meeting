@@ -3,10 +3,12 @@ wx_cleanup.py — Cleanup Worker
 Cancella periodicamente i file temporanei su disco (input audio + output locale)
 per i job già completati o falliti su MinIO.
 
+I job in stato PAUSED NON vengono mai toccati: il file audio di input è
+necessario per poter riprendere il job via POST /jobs/{id}/resume.
+
 Parametri via env:
   WX_CLEANUP_INTERVAL_SEC   intervallo tra ogni ciclo di pulizia (default: 3600 = 1h)
   WX_CLEANUP_MIN_AGE_SEC    età minima del job prima di pulire (default: 300 = 5 min)
-                            evita di cancellare file di job appena completati
   WX_DATA_DIR               cartella dati (default: /data)
   REDIS_URL                 URL Redis
 """
@@ -47,7 +49,10 @@ def job_age_sec(job_id: str) -> float:
         return float("inf")
 
 def is_terminal(job_id: str) -> bool:
-    """Restituisce True se il job è in stato finale (COMPLETED o FAILED)."""
+    """
+    Restituisce True se il job è in stato finale pulibile (COMPLETED o FAILED).
+    PAUSED non è terminale: il file di input serve per poter fare resume.
+    """
     status = r.hget(f"wx:job:{job_id}", "status") or ""
     return status in ("COMPLETED", "FAILED")
 
@@ -91,9 +96,9 @@ def run_cleanup():
     # Scansiona tutti i job su Redis
     for key in r.scan_iter(match="wx:job:*", count=200):
         job_id = r.hget(key, "job_id") or key.split(":")[-1]
+        status = r.hget(f"wx:job:{job_id}", "status") or "UNKNOWN"
 
         if not is_terminal(job_id):
-            status = r.hget(f"wx:job:{job_id}", "status") or "UNKNOWN"
             print(f"[cleanup] skip {job_id[:8]}... — stato {status}, non terminale", flush=True)
             skipped += 1
             continue

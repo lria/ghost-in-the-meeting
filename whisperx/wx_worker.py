@@ -108,20 +108,50 @@ def pg_update(job_id: str, **fields):
     except Exception as e:
         print(f"[worker] PG update warning: {e}", flush=True)
 
+def is_stop_requested(job_id: str) -> bool:
+    """Ritorna True se l'API ha settato stop_requested=1 su Redis."""
+    return r.hget(job_key(job_id), "stop_requested") == "1"
+
+
+class StopRequested(Exception):
+    """Sollevata quando il worker rileva una richiesta di stop."""
+    pass
+
+def is_stop_requested(job_id: str) -> bool:
+    """Ritorna True se l'API ha settato stop_requested=1 su Redis."""
+    return r.hget(job_key(job_id), "stop_requested") == "1"
+
+
+class StopRequested(Exception):
+    """Sollevata dal worker quando rileva una richiesta di stop."""
+    pass
+
+
 def ffmpeg_to_wav(src: Path, dst: Path):
     """Converte qualsiasi formato audio/video in WAV mono 16kHz."""
     cmd = ["ffmpeg", "-y", "-i", str(src),
            "-ac", "1", "-ar", "16000", "-vn", str(dst)]
-    subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) 
 
 
 # ── Trascrizione con faster-whisper ──────────────────────────────────────────
 
-def transcribe(model, wav_path: Path, language: str) -> tuple[list[dict], str]:
+def get_wav_duration(wav_path: Path) -> float:
+    """Restituisce la durata in secondi di un WAV, o 0.0 in caso di errore."""
+    try:
+        import wave as _wave
+        with _wave.open(str(wav_path), "rb") as wf:
+            return wf.getnframes() / wf.getframerate()
+    except Exception:
+        return 0.0
+
+
+def transcribe(model, wav_path: Path, language: str,
+               on_progress=None, stop_check=None) -> tuple[list[dict], str]:
     """
     Trascrive con faster-whisper.
-    Restituisce (segments, detected_language).
-    Ogni segmento: {start, end, text, words: [{start, end, word, probability}]}
+    on_progress(pct: int)  — chiamata ad ogni cambio di percentuale (0-100).
+    stop_check() -> bool   — se ritorna True interrompe e solleva StopRequested.
     """
     lang_param = None if language == "auto" else language
 
@@ -134,8 +164,14 @@ def transcribe(model, wav_path: Path, language: str) -> tuple[list[dict], str]:
         vad_parameters={"min_silence_duration_ms": 500},
     )
 
+    duration = get_wav_duration(wav_path)
+    last_pct = -1
+
     segments = []
     for seg in segments_gen:
+        if stop_check and stop_check():
+            raise StopRequested()
+
         words = []
         if seg.words:
             words = [
@@ -149,6 +185,12 @@ def transcribe(model, wav_path: Path, language: str) -> tuple[list[dict], str]:
             "text":  seg.text.strip(),
             "words": words,
         })
+
+        if on_progress and duration > 0:
+            pct = min(99, int(seg.end / duration * 100))
+            if pct >= last_pct + 5:
+                last_pct = pct
+                on_progress(pct)
 
     return segments, info.language
 
@@ -183,11 +225,16 @@ def merge_transcript_diarization(segments: list[dict], diarization) -> list[dict
 # ── Stale recovery ────────────────────────────────────────────────────────────
 
 def recover_stale_jobs():
-    """Ri-accoda job rimasti PENDING o WORKING (da crash precedente)."""
+    """Ri-accoda job rimasti PENDING o WORKING (da crash precedente).
+    I job PAUSED vengono ignorati — ripresi solo via /jobs/{id}/resume."""
     for key in r.scan_iter(match="wx:job:*", count=200):
         status     = r.hget(key, "status") or ""
         job_id     = r.hget(key, "job_id") or key.split(":")[-1]
         input_file = r.hget(key, "input_file") or ""
+
+        # PAUSED: mai ri-accodati automaticamente
+        if status == "PAUSED":
+            continue
 
         if not input_file or not Path(input_file).exists():
             continue
@@ -207,6 +254,21 @@ def recover_stale_jobs():
             if age >= STALE_WORKING_SEC:
                 r.rpush(QUEUE_KEY, job_id)
                 update_job(job_id, status="PENDING", step="RECOVERY_REQUEUED_STALE")
+
+
+def _pause_job(job_id: str, step: str):
+    """
+    Mette il job in stato PAUSED: bloccato, non ri-accodato automaticamente.
+    Cancella il flag stop_requested.
+    """
+    r.hset(job_key(job_id), mapping={
+        "status":        "PAUSED",
+        "step":          f"PAUSED_AT_{step}",
+        "stop_requested": "0",
+        "updated_at":    utc_now(),
+    })
+    pg_update(job_id, status="PAUSED")
+    print(f"[worker] job {job_id} messo in PAUSED allo step {step}", flush=True)
 
 
 # ── Core job ──────────────────────────────────────────────────────────────────
@@ -243,10 +305,22 @@ def run_job(job_id: str, fw_model, diar_pipeline):
         return
 
     # ── 3. Trascrizione faster-whisper ──────────────────────────────────────
-    update_job(job_id, step="TRANSCRIBING")
+    update_job(job_id, step="TRANSCRIBING_0pct")
     try:
-        segments, detected_language = transcribe(fw_model, wav_path, language)
+        def _transcribe_progress(pct: int):
+            if is_stop_requested(job_id):
+                raise StopRequested()
+            update_job(job_id, step=f"TRANSCRIBING_{pct}pct")
+            print(f"[worker] trascrizione: {pct}%", flush=True)
+
+        segments, detected_language = transcribe(fw_model, wav_path, language,
+                                                  on_progress=_transcribe_progress,
+                                                  stop_check=lambda: is_stop_requested(job_id))
+        update_job(job_id, step="TRANSCRIBING_100pct")
         print(f"[worker] lingua rilevata: {detected_language} — {len(segments)} segmenti", flush=True)
+    except StopRequested:
+        _pause_job(job_id, step=r.hget(job_key(job_id), "step") or "TRANSCRIBING")
+        return
     except Exception as e:
         update_job(job_id, status="FAILED", step="TRANSCRIBE_FAILED", error=str(e))
         pg_update(job_id, status="FAILED", error_message=f"transcription: {e}")
@@ -259,6 +333,8 @@ def run_job(job_id: str, fw_model, diar_pipeline):
             from pyannote.audio.pipelines.utils.hook import Hooks
 
             def _progress(step_name, step_artifact, file=None, total=None, completed=None):
+                if is_stop_requested(job_id):
+                    raise StopRequested()
                 if total and completed is not None and total > 0:
                     pct = int(completed / total * 100)
                     print(f"[worker] diarizzazione {step_name}: {pct}%", flush=True)
@@ -272,6 +348,9 @@ def run_job(job_id: str, fw_model, diar_pipeline):
                 )
             segments = merge_transcript_diarization(segments, diarization)
             print(f"[worker] diarizzazione completata", flush=True)
+        except StopRequested:
+            _pause_job(job_id, step=r.hget(job_key(job_id), "step") or "DIARIZING")
+            return
         except Exception as e:
             print(f"[worker] ⚠ diarizzazione fallita job {job_id}: {e}", flush=True)
             update_job(job_id, step="DIAR_SKIPPED_ERROR")
@@ -381,18 +460,33 @@ def run_job(job_id: str, fw_model, diar_pipeline):
             print(f"[worker] ⚠ MinIO TXT warning job {job_id}: {e}", flush=True)
             minio_txt_url = f"local:{txt_path}"
 
+    # ── 6. Upload audio originale su MinIO ───────────────────────────────────
+    minio_audio_url = ""
+    try:
+        update_job(job_id, step="UPLOADING_AUDIO")
+        audio_ext       = Path(input_file).suffix or ".bin"
+        minio_audio_key = f"{customer}/{project}/{minio_folder}/audio_original{audio_ext}"
+        s3.upload_file(str(input_file), MINIO_BUCKET, minio_audio_key)
+        minio_audio_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET}/{minio_audio_key}"
+        print(f"[worker] upload AUDIO OK: {minio_audio_url}", flush=True)
+    except Exception as e:
+        print(f"[worker] ⚠ MinIO AUDIO warning job {job_id}: {e}", flush=True)
+
     # ── 7. Aggiorna Redis e PostgreSQL ───────────────────────────────────────
     update_job(job_id, status="COMPLETED", step="DONE",
                output_json_url=minio_url,
                output_txt_url=minio_txt_url,
+               audio_url=minio_audio_url,
                result_path=str(job_out_dir))
     pg_update(job_id, status="COMPLETED",
               output_json_url=minio_url or minio_txt_url,
+              audio_url=minio_audio_url,
               finished_at=utc_now())
 
     print(f"[worker] ✓ job {job_id} COMPLETED", flush=True)
-    if minio_url:     print(f"  JSON: {minio_url}", flush=True)
-    if minio_txt_url: print(f"  TXT:  {minio_txt_url}", flush=True)
+    if minio_url:       print(f"  JSON:  {minio_url}", flush=True)
+    if minio_txt_url:   print(f"  TXT:   {minio_txt_url}", flush=True)
+    if minio_audio_url: print(f"  AUDIO: {minio_audio_url}", flush=True)
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────

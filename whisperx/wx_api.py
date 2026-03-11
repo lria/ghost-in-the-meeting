@@ -11,6 +11,8 @@ import os
 import uuid
 import shutil
 import psycopg2
+import boto3
+from botocore.exceptions import ClientError
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -27,6 +29,12 @@ QUEUE_KEY  = os.getenv("WX_QUEUE_KEY",    "wx:queue")
 DATA_DIR   = Path(os.getenv("WX_DATA_DIR", "/data"))
 IN_DIR     = DATA_DIR / "in"
 IN_DIR.mkdir(parents=True, exist_ok=True)
+
+MINIO_ENDPOINT   = os.getenv("MINIO_ENDPOINT",   "http://minio:9000")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY",  "minioadmin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY",  "minioadmin")
+MINIO_BUCKET     = os.getenv("MINIO_BUCKET",       "wx-transcriptions")
+MINIO_SECURE     = os.getenv("MINIO_SECURE",       "false").lower() == "true"
 
 PG_DSN = (
     f"host={os.getenv('PGHOST','postgres')} "
@@ -76,7 +84,7 @@ def pg_insert_job(job_id: str, customer: str, project: str,
 def pg_get_job(job_id: str) -> dict | None:
     sql = """
         SELECT job_id, status, step, customer, project, language,
-               max_speakers, output_json_url, error_message,
+               max_speakers, output_json_url, audio_url, error_message,
                created_at, updated_at, started_at, finished_at
         FROM wx_transcription_jobs WHERE job_id = %s
     """
@@ -86,7 +94,7 @@ def pg_get_job(job_id: str) -> dict | None:
     if not row:
         return None
     cols = ["job_id","status","step","customer","project","language",
-            "max_speakers","output_json_url","error_message",
+            "max_speakers","output_json_url","audio_url","error_message",
             "created_at","updated_at","started_at","finished_at"]
     return {c: (v.isoformat() if hasattr(v, "isoformat") else v)
             for c, v in zip(cols, row)}
@@ -227,12 +235,20 @@ def get_job(job_id: str):
         # Preferisce i dati freschi da PostgreSQL (contiene URL MinIO)
         pg_row = pg_get_job(job_id)
         if pg_row:
-            payload["output_json_url"]     = pg_row.get("output_json_url")
-            payload["finished_at"]          = pg_row.get("finished_at")
+            payload["output_json_url"] = pg_row.get("output_json_url")
+            payload["audio_url"]       = pg_row.get("audio_url") or r.hget(k, "audio_url") or ""
+            payload["finished_at"]     = pg_row.get("finished_at")
         else:
-            payload["output_json_url"]     = r.hget(k, "output_json_url") or ""
-        payload["output_txt_url"]       = r.hget(k, "output_txt_url")  or ""
-        payload["output_format"]        = r.hget(k, "output_format")   or "both"
+            payload["output_json_url"] = r.hget(k, "output_json_url") or ""
+            payload["audio_url"]       = r.hget(k, "audio_url") or ""
+        payload["output_txt_url"]  = r.hget(k, "output_txt_url")  or ""
+        payload["output_format"]   = r.hget(k, "output_format")   or "both"
+
+    if status == "DELETED":
+        # Job svuotato — solo metadati, nessun file
+        payload["output_json_url"] = ""
+        payload["output_txt_url"]  = ""
+        payload["audio_url"]       = ""
 
     return payload
 
@@ -259,3 +275,251 @@ def retry_job(job_id: str):
     })
     r.rpush(QUEUE_KEY, job_id)
     return {"job_id": job_id, "status": "PENDING", "step": "REQUEUED_MANUAL"}
+
+
+@app.post("/jobs/{job_id}/pause")
+def pause_job(job_id: str):
+    """
+    Richiede al worker di fermarsi allo step corrente.
+    Setta stop_requested=1 su Redis — il worker lo legge entro qualche secondo
+    e transisce il job in PAUSED.
+    Funziona solo se il job è in stato WORKING.
+    """
+    k = job_key(job_id)
+    if not r.exists(k):
+        return JSONResponse(status_code=404,
+                            content={"error": "job_not_found", "job_id": job_id})
+
+    status = r.hget(k, "status") or ""
+    if status != "WORKING":
+        return JSONResponse(status_code=409,
+                            content={"error": "not_working",
+                                     "detail": f"il job è in stato {status}, non WORKING",
+                                     "job_id": job_id})
+
+    r.hset(k, mapping={
+        "stop_requested": "1",
+        "updated_at":     utc_now(),
+    })
+    print(f"[api] stop_requested=1 → job {job_id}", flush=True)
+    return {"job_id": job_id, "stop_requested": True,
+            "detail": "il worker si fermerà entro qualche secondo"}
+
+
+@app.post("/jobs/{job_id}/resume")
+def resume_job(job_id: str):
+    """
+    Riprende un job in stato PAUSED ri-accodandolo su Redis.
+    Verifica che il file audio di input sia ancora presente su disco.
+    Se il cleaner lo ha cancellato restituisce un errore chiaro con suggerimento.
+    """
+    k = job_key(job_id)
+    if not r.exists(k):
+        return JSONResponse(status_code=404,
+                            content={"error": "job_not_found", "job_id": job_id})
+
+    status = r.hget(k, "status") or ""
+    if status != "PAUSED":
+        return JSONResponse(status_code=409,
+                            content={"error": "not_paused",
+                                     "detail": f"il job è in stato {status}, non PAUSED",
+                                     "job_id": job_id})
+
+    input_file = r.hget(k, "input_file") or ""
+    if not input_file or not Path(input_file).exists():
+        # Il cleaner ha già rimosso il file — informa con dettaglio utile
+        return JSONResponse(status_code=410,
+                            content={
+                                "error":   "input_file_gone",
+                                "detail":  "il file audio originale è stato rimosso dal cleaner",
+                                "suggestion": "ri-invia il job con POST /jobs allegando l'audio",
+                                "job_id":  job_id,
+                                "input_file": input_file,
+                            })
+
+    r.hset(k, mapping={
+        "status":         "PENDING",
+        "step":           "RESUMED",
+        "stop_requested": "0",
+        "updated_at":     utc_now(),
+        "error":          "",
+    })
+    r.rpush(QUEUE_KEY, job_id)
+    print(f"[api] job {job_id} RESUMED → messo in coda", flush=True)
+    return {"job_id": job_id, "status": "PENDING", "step": "RESUMED"}
+
+
+
+def s3_client():
+    return boto3.client(
+        "s3",
+        endpoint_url=MINIO_ENDPOINT,
+        aws_access_key_id=MINIO_ACCESS_KEY,
+        aws_secret_access_key=MINIO_SECRET_KEY,
+        region_name="us-east-1",
+        verify=MINIO_SECURE,
+    )
+
+def s3_delete_url(s3, url: str):
+    """Cancella un oggetto MinIO dato il suo URL pubblico. Ignora errori 404."""
+    if not url or not url.startswith(MINIO_ENDPOINT):
+        return
+    # es: http://minio:9000/wx-transcriptions/Acme/Proj/20260307_173045_abc/result.json
+    path = url[len(MINIO_ENDPOINT):].lstrip("/")
+    # path = "wx-transcriptions/Acme/..."
+    parts = path.split("/", 1)
+    if len(parts) != 2:
+        return
+    bucket, key = parts
+    try:
+        s3.delete_object(Bucket=bucket, Key=key)
+        print(f"[api] deleted s3://{bucket}/{key}", flush=True)
+    except ClientError as e:
+        code = str(e.response.get("Error", {}).get("Code", ""))
+        if code not in ("404", "NoSuchKey"):
+            raise
+
+
+# ── DELETE /jobs/{job_id} ─────────────────────────────────────────────────────
+
+@app.delete("/jobs/{job_id}")
+def delete_job(job_id: str, scope: str = "transcript"):
+    """
+    scope=audio       → cancella solo il file audio (MinIO + disco)
+    scope=transcript  → audio + file trascrizione (JSON/TXT da MinIO)
+    scope=rag         → transcript + Qdrant + speaker_aliases + minutes_jobs → status DELETED
+    scope=purge       → rimuove completamente Redis + PostgreSQL (solo su job DELETED)
+    """
+    try:
+        return _delete_job_impl(job_id, scope)
+    except Exception as e:
+        import traceback
+        print(f"[api] DELETE /jobs/{job_id} unhandled: {traceback.format_exc()}", flush=True)
+        return JSONResponse(status_code=500, content={"error": "internal_error", "detail": str(e)})
+
+
+def _delete_job_impl(job_id: str, scope: str):
+    if scope not in ("audio", "transcript", "rag", "purge"):
+        return JSONResponse(status_code=400,
+                            content={"error": "invalid_scope",
+                                     "detail": "scope deve essere: audio | transcript | rag | purge"})
+
+    k = job_key(job_id)
+    if not r.exists(k):
+        return JSONResponse(status_code=404,
+                            content={"error": "job_not_found", "job_id": job_id})
+
+    current_status = r.hget(k, "status") or ""
+
+    # purge solo su job DELETED
+    if scope == "purge" and current_status != "DELETED":
+        return JSONResponse(status_code=409,
+                            content={"error": "not_deleted",
+                                     "detail": "purge è disponibile solo per job in status DELETED"})
+
+    audio_url = r.hget(k, "audio_url")       or ""
+    json_url  = r.hget(k, "output_json_url") or ""
+    txt_url   = r.hget(k, "output_txt_url")  or ""
+
+    deleted = []
+    errors  = []
+    s3 = s3_client()
+
+    def _s3_del(url):
+        if not url:
+            return
+        try:
+            s3_delete_url(s3, url)
+            deleted.append(url)
+        except Exception as e:
+            errors.append(str(e))
+
+    def _local_del():
+        input_file = r.hget(k, "input_file") or ""
+        if not input_file:
+            return
+        try:
+            p = Path(input_file)
+            if p.exists():
+                p.unlink()
+                deleted.append(input_file)
+            if p.parent.exists() and not any(p.parent.iterdir()):
+                p.parent.rmdir()
+        except Exception as e:
+            errors.append(f"local file: {e}")
+
+    # ── audio ─────────────────────────────────────────────────────────────────
+    if scope in ("audio", "transcript", "rag"):
+        _s3_del(audio_url)
+        _local_del()
+        r.hset(k, mapping={"audio_url": "", "input_file": "", "updated_at": utc_now()})
+        try:
+            with pg_conn() as conn, conn.cursor() as cur:
+                cur.execute("UPDATE wx_transcription_jobs SET audio_url=NULL WHERE job_id=%s", (job_id,))
+        except Exception as e:
+            errors.append(f"pg audio: {e}")
+
+    # ── transcript (JSON + TXT) ───────────────────────────────────────────────
+    if scope in ("transcript", "rag"):
+        _s3_del(json_url)
+        _s3_del(txt_url)
+        r.hset(k, mapping={"output_json_url": "", "output_txt_url": "", "updated_at": utc_now()})
+        try:
+            with pg_conn() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE wx_transcription_jobs SET output_json_url=NULL WHERE job_id=%s", (job_id,))
+        except Exception as e:
+            errors.append(f"pg transcript: {e}")
+
+    # ── rag: Qdrant + speaker_aliases + minutes_jobs → status DELETED ─────────
+    if scope == "rag":
+        # Qdrant — elimina chunks indicizzati per questo job
+        try:
+            from qdrant_client import QdrantClient
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            QDRANT_URL        = os.getenv("QDRANT_URL",        "http://qdrant:6333")
+            QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "transcripts")
+            qc = QdrantClient(url=QDRANT_URL)
+            qc.delete(
+                collection_name=QDRANT_COLLECTION,
+                points_selector=Filter(
+                    must=[FieldCondition(key="job_id", match=MatchValue(value=job_id))]
+                ),
+            )
+            deleted.append(f"qdrant:{QDRANT_COLLECTION}:{job_id}")
+        except Exception as e:
+            errors.append(f"qdrant: {e}")
+
+        # speaker_aliases e minutes_jobs (cascade da wx_transcription_jobs ma li
+        # cancelliamo esplicitamente per non toccare la riga principale)
+        try:
+            with pg_conn() as conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM speaker_aliases WHERE job_id=%s", (job_id,))
+                cur.execute("DELETE FROM minutes_jobs   WHERE job_id=%s", (job_id,))
+        except Exception as e:
+            errors.append(f"pg rag tables: {e}")
+
+        # Imposta status DELETED — il job resta visibile nello storico
+        r.hset(k, mapping={"status": "DELETED", "step": "DELETED", "updated_at": utc_now()})
+        try:
+            with pg_conn() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE wx_transcription_jobs SET status='DELETED' WHERE job_id=%s", (job_id,))
+        except Exception as e:
+            errors.append(f"pg status: {e}")
+
+    # ── purge: rimuove completamente Redis + PostgreSQL ───────────────────────
+    if scope == "purge":
+        r.delete(k)
+        try:
+            with pg_conn() as conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM wx_transcription_jobs WHERE job_id=%s", (job_id,))
+        except Exception as e:
+            errors.append(f"pg purge: {e}")
+
+    return {
+        "job_id":  job_id,
+        "scope":   scope,
+        "deleted": deleted,
+        "errors":  errors,
+    }

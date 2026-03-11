@@ -28,7 +28,11 @@ POLL_INTERVAL = float(os.getenv("SSE_POLL_INTERVAL", "2.0"))   # secondi tra i p
 KEEPALIVE_SEC = float(os.getenv("SSE_KEEPALIVE_SEC",  "15.0"))  # heartbeat SSE
 JOB_KEY_PREFIX = "wx:job:"
 
-TERMINAL_STATUSES = {"COMPLETED", "FAILED"}
+TERMINAL_STATUSES = {"COMPLETED", "FAILED", "DELETED"}
+# Job da monitorare attivamente: tutto ciò che non è terminale
+# PAUSED è incluso — il worker potrebbe riprenderlo e farlo tornare WORKING
+ACTIVE_STATUSES_WATCH = lambda s: s.upper() not in TERMINAL_STATUSES
+
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
@@ -148,7 +152,7 @@ async def event_stream(
             all_jobs = await fetch_all_jobs(r)
             watch_ids = [
                 j["job_id"] for j in all_jobs
-                if j["status"].upper() not in TERMINAL_STATUSES
+                if ACTIVE_STATUSES_WATCH(j["status"])
             ]
         elif jobs:
             watch_ids = [jid.strip() for jid in jobs.split(",") if jid.strip()]
@@ -156,7 +160,7 @@ async def event_stream(
             yield sse_comment("no jobs requested")
             return
 
-        if not watch_ids:
+        if not all and not watch_ids:
             yield sse_event("stream_end", {"message": "nessun job attivo"})
             return
 
@@ -172,8 +176,10 @@ async def event_stream(
 
         # Stream loop
         last_keepalive = asyncio.get_event_loop().time()
+        last_rescan    = asyncio.get_event_loop().time()
+        RESCAN_SEC     = 10.0  # ogni 10s controlla se ci sono nuovi job non-terminali
 
-        while watch_ids:
+        while True:
             await asyncio.sleep(POLL_INTERVAL)
 
             now = asyncio.get_event_loop().time()
@@ -182,6 +188,21 @@ async def event_stream(
             if now - last_keepalive >= KEEPALIVE_SEC:
                 yield sse_comment(f"keepalive {utc_now()}")
                 last_keepalive = now
+
+            # Rescan periodico: aggiunge job nuovi o RESUMED non ancora in watch_ids
+            if all and now - last_rescan >= RESCAN_SEC:
+                fresh_jobs = await fetch_all_jobs(r)
+                for fj in fresh_jobs:
+                    fid = fj["job_id"]
+                    if fid not in watch_ids and ACTIVE_STATUSES_WATCH(fj["status"]):
+                        watch_ids.append(fid)
+                        prev_states[fid] = fj
+                        yield sse_event("job_update", fj)
+                last_rescan = now
+
+            if not watch_ids:
+                yield sse_comment("idle — no active jobs")
+                continue
 
             completed_this_round = []
 
@@ -204,8 +225,12 @@ async def event_stream(
             for job_id in completed_this_round:
                 watch_ids.remove(job_id)
 
-        # Tutti i job sono terminali
-        yield sse_event("stream_end", {"message": "tutti i job monitorati sono terminali", "at": utc_now()})
+            # Per ?jobs=... specifici: chiudi quando tutti terminali
+            if not all and not watch_ids:
+                yield sse_event("stream_end", {"message": "tutti i job monitorati sono terminali", "at": utc_now()})
+                return
+
+        # (stream ?all=1 non termina mai — il browser si disconnette quando vuole)
 
     return StreamingResponse(
         generate(),

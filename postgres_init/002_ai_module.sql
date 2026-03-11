@@ -19,6 +19,7 @@
 ALTER TABLE public.wx_transcription_jobs
   ADD COLUMN IF NOT EXISTS output_minutes_url text,
   ADD COLUMN IF NOT EXISTS output_txt_url     text,
+  ADD COLUMN IF NOT EXISTS audio_url          text,
   ADD COLUMN IF NOT EXISTS speakers_mapped    boolean NOT NULL DEFAULT false;
 
 
@@ -110,6 +111,7 @@ SELECT
   j.input_filename,
   j.output_json_url,
   j.output_txt_url,
+  j.audio_url,
   j.output_minutes_url,
   j.created_at,
   j.finished_at,

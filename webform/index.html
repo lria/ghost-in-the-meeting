@@ -8,35 +8,112 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <style>
-    /* ── Context menu ── */
-    .ctx-menu-wrap { position: relative; display: inline-flex; }
-    .ctx-btn {
-      background: none; border: none; cursor: pointer; padding: 4px 6px;
-      border-radius: var(--radius-sm); color: var(--text-muted);
-      display: grid; place-items: center; transition: background 0.12s, color 0.12s;
-      flex-shrink: 0;
-    }
-    .ctx-btn:hover { background: var(--surface-2); color: var(--text-primary); }
-    .ctx-menu {
-      display: none; position: absolute; top: calc(100% + 4px); right: 0;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,.10);
-      min-width: 190px; z-index: 100; overflow: hidden;
-    }
-    .ctx-menu.open { display: block; }
-    .ctx-item {
-      display: flex; align-items: center; gap: 9px;
-      padding: 9px 14px; font-size: 13px; color: var(--text-secondary);
-      cursor: pointer; text-decoration: none; transition: background 0.1s;
-      border: none; background: none; width: 100%; text-align: left;
+    /* ── Action buttons (accordion) ── */
+    .btn-action {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; font-size: 12px; font-weight: 500;
+      color: var(--text-secondary); background: var(--surface-2);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      cursor: pointer; text-decoration: none; transition: all 0.12s;
       font-family: 'DM Sans', sans-serif;
     }
-    .ctx-item:hover { background: var(--surface-2); color: var(--text-primary); }
-    .ctx-item svg { flex-shrink: 0; }
-    .ctx-divider { height: 1px; background: var(--border); margin: 3px 0; }
-    .ctx-item.disabled { opacity: 0.4; cursor: not-allowed; }
-    .ctx-item.disabled:hover { background: none; color: var(--text-secondary); }
-    .ctx-badge { font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px; background: var(--warning-light); color: var(--warning); margin-left: auto; }
+    .btn-action:hover { background: var(--surface); border-color: var(--border-hover); color: var(--text-primary); }
+    .btn-action svg { flex-shrink: 0; }
+
+    /* ── Pause / Resume / Deleted ── */
+    .status-badge.paused  { background: #f5f3ff; color: #7c3aed; }
+    .status-badge.paused .dot  { background: #7c3aed; }
+    .status-badge.deleted { background: var(--surface-2); color: var(--text-muted); }
+    .status-badge.deleted .dot { background: var(--text-muted); }
+
+    .btn-stop {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:6px 13px; background:var(--error-light); color:var(--error);
+      border:1px solid #fecaca; border-radius:var(--radius-sm);
+      font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600;
+      cursor:pointer; transition:all 0.15s; margin-top:12px;
+    }
+    .btn-stop:hover:not(:disabled) { background:#fecaca; }
+    .btn-stop:disabled { opacity:0.45; cursor:not-allowed; }
+
+    .btn-resume {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:5px 12px; background:#f5f3ff; color:#7c3aed;
+      border:1px solid #ddd6fe; border-radius:var(--radius-sm);
+      font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600;
+      cursor:pointer; transition:all 0.15s;
+    }
+    .btn-resume:hover:not(:disabled) { background:#ede9fe; }
+    .btn-resume:disabled { opacity:0.45; cursor:not-allowed; }
+
+    .btn-delete {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:5px 12px; background:var(--surface-2); color:var(--text-muted);
+      border:1px solid var(--border); border-radius:var(--radius-sm);
+      font-family:'DM Sans',sans-serif; font-size:12px; font-weight:500;
+      cursor:pointer; transition:all 0.15s;
+    }
+    .btn-delete:hover:not(:disabled) { background:var(--error-light); color:var(--error); border-color:#fecaca; }
+    .btn-delete:disabled { opacity:0.45; cursor:not-allowed; }
+
+    /* ── Delete overlay ── */
+    .del-overlay {
+      position:fixed; inset:0; z-index:200;
+      background:rgba(0,0,0,.35); backdrop-filter:blur(2px);
+      display:flex; align-items:center; justify-content:center;
+      animation: fadeIn .15s ease;
+    }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+    .del-modal {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius-lg); box-shadow:0 20px 60px rgba(0,0,0,.18);
+      width:100%; max-width:400px; margin:16px;
+      animation: slideUp .18s ease;
+    }
+    @keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+    .del-modal-header {
+      padding:18px 20px 14px; border-bottom:1px solid var(--border);
+      display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+    }
+    .del-modal-title { font-size:14px; font-weight:600; color:var(--text-primary); }
+    .del-modal-sub   { font-size:12px; color:var(--text-muted); margin-top:2px; }
+    .del-modal-close {
+      background:none; border:none; cursor:pointer; color:var(--text-muted);
+      padding:2px; border-radius:4px; flex-shrink:0; margin-top:-2px;
+    }
+    .del-modal-close:hover { color:var(--text-primary); background:var(--surface-2); }
+    .del-modal-body  { padding:14px 20px; display:flex; flex-direction:column; gap:6px; }
+    .del-opt {
+      display:flex; align-items:flex-start; gap:12px; padding:11px 13px;
+      border:1px solid var(--border); border-radius:var(--radius);
+      cursor:pointer; transition:all .12s; background:var(--surface); text-align:left;
+      width:100%; font-family:'DM Sans',sans-serif;
+    }
+    .del-opt:hover { border-color:#fca5a5; background:#fff5f5; }
+    .del-opt-icon  { width:30px; height:30px; border-radius:8px; background:var(--error-light); display:grid; place-items:center; flex-shrink:0; margin-top:1px; }
+    .del-opt-label { font-size:13px; font-weight:600; color:var(--text-primary); }
+    .del-opt-desc  { font-size:11px; color:var(--text-muted); margin-top:2px; line-height:1.4; }
+    .del-opt.danger .del-opt-icon { background:#fee2e2; }
+    .del-opt.danger .del-opt-label { color:var(--error); }
+    .del-opt.danger:hover { border-color:var(--error); background:#fff1f1; }
+    .del-modal-footer { padding:12px 20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; }
+    .del-cancel {
+      background:none; border:1px solid var(--border); border-radius:var(--radius-sm);
+      padding:6px 14px; font-size:12px; font-weight:500; color:var(--text-secondary);
+      cursor:pointer; font-family:'DM Sans',sans-serif; transition:all .12s;
+    }
+    .del-cancel:hover { background:var(--surface-2); }
+    .del-modal-status { padding:16px 20px; font-size:12px; color:var(--text-muted); text-align:center; }
+
+    .paused-warning {
+      display:flex; align-items:flex-start; gap:9px;
+      background:#f5f3ff; border:1px solid #ddd6fe;
+      border-radius:var(--radius); padding:11px 13px; margin-top:8px;
+    }
+    .paused-warning-text { font-size:12px; color:#5b21b6; line-height:1.5; }
+    .paused-warning-text strong { display:block; font-weight:600; margin-bottom:2px; }
+
+    .paused-bar { background: #7c3aed !important; }
   </style>
 </head>
 <body>
@@ -226,9 +303,6 @@
 
 </div>
 
-<!-- Context menu overlay click-away -->
-<div id="ctx-overlay" style="display:none;position:fixed;inset:0;z-index:99" onclick="closeAllCtx()"></div>
-
 <script>
   const API_BASE    = "http://localhost:9200";
   const N8N_INGEST  = "http://localhost:5678/webhook/minute/ingest";
@@ -247,7 +321,8 @@
     {key:"UPLOADING",label:"Upload MinIO"},
     {key:"COMPLETED",label:"Completato"},
   ];
-  const TERMINAL = ["COMPLETED","FAILED"];
+  const TERMINAL = ["COMPLETED","FAILED","DELETED"];
+  const PAUSED_S = ["PAUSED"];
   const $ = id => document.getElementById(id);
   const fmt = iso => { try { return new Date(iso).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return iso||'—'; } };
   const jobTitle = job => `${job.customer||'?'} — ${job.project||'?'} — del ${fmt(job.created_at)}`;
@@ -290,12 +365,14 @@
   }
 
   function renderAll() {
-    const all    = Object.values(jobsMap).sort((a,b)=>(b.created_at??'').localeCompare(a.created_at??''));
-    const active = all.filter(j=>!TERMINAL.includes(j.status));
-    const done   = all.filter(j=> TERMINAL.includes(j.status));
-    const current = active.find(j=>j.status==='WORKING') ?? active[0] ?? null;
-    renderCurrent(current, active.filter(j=>j!==current).length>0);
-    renderHistory(done);
+    const all     = Object.values(jobsMap).sort((a,b)=>(b.created_at??'').localeCompare(a.created_at??''));
+    const active  = all.filter(j=>!TERMINAL.includes(j.status) && !PAUSED_S.includes(j.status));
+    const paused  = all.filter(j=> PAUSED_S.includes(j.status));
+    const done    = all.filter(j=> TERMINAL.includes(j.status));
+    const current = active.find(j=>j.status==='WORKING') ?? active[0] ?? paused[0] ?? null;
+    const queuedCount = active.filter(j=>j!==current).length + (paused[0]&&current===paused[0] ? 0 : paused.length);
+    renderCurrent(current, queuedCount > 0);
+    renderHistory([...done, ...paused.filter(p=>p!==current)]);
   }
 
   function renderCurrent(job, hasQueued) {
@@ -309,19 +386,66 @@
     $('current-updated').textContent=fmt(job.updated_at)||'—';
     const pct=calcPercent(job.step,job.status);
     const fill=$('current-progress-fill');
-    if(pct!==null){fill.className='progress-fill';fill.style.width=pct+'%';}
-    else{fill.className='progress-fill indeterminate';fill.style.width='';}
+    if(pct!==null){
+      fill.className='progress-fill' + (job.status==='PAUSED' ? ' paused-bar' : '');
+      fill.style.width=pct+'%';
+    } else if(job.status==='PAUSED') {
+      // Nessuna % disponibile ma siamo paused: barra ferma al punto corrente
+      fill.className='progress-fill paused-bar';
+      // lascia width invariata
+    } else {
+      fill.className='progress-fill indeterminate';fill.style.width='';
+    }
     $('current-steps-list').innerHTML=pipelineHtml(job.step,job.status);
+
+    // Stop button — visibile solo se WORKING
+    let stopBtn = $('current-stop-btn');
+    if (!stopBtn) {
+      stopBtn = document.createElement('div');
+      stopBtn.id = 'current-stop-btn';
+      stopBtn.style.padding = '0 20px 16px';
+      $('current-job').appendChild(stopBtn);
+    }
+    if (job.status === 'WORKING') {
+      stopBtn.innerHTML = `<button class="btn-stop" id="stop-btn-inner" data-job-id="${job.job_id}">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/><circle cx="12" cy="12" r="10"/></svg>
+        Sospendi
+      </button>`;
+      stopBtn.querySelector('#stop-btn-inner').onclick = () => pauseJob(job.job_id);
+    } else if (job.status === 'PAUSED') {
+      const pausedStep = (job.step||'').replace(/^PAUSED_AT_/i,'').replace(/_/g,' ').toLowerCase();
+      stopBtn.innerHTML = `
+        <div class="paused-warning" style="margin-bottom:12px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/></svg>
+          <div class="paused-warning-text"><strong>Trascrizione sospesa</strong>Sospesa durante: ${pausedStep}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn-resume resume-btn" data-job-id="${job.job_id}">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Riprendi
+          </button>
+          <button class="btn-delete delete-btn" data-job-id="${job.job_id}">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            Elimina
+          </button>
+          <span id="current-resume-err-${job.job_id}" style="display:none;font-size:11px;color:var(--error)"></span>
+        </div>`;
+    } else {
+      stopBtn.innerHTML = '';
+    }
   }
 
   function renderHistory(jobs) {
     const sec=$('history-section');
     if(!jobs.length){sec.style.display='none';return;}
     sec.style.display='block';
+    const trashIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
     $('history-container').innerHTML=jobs.map(job=>{
       const isOpen=openHistId===job.job_id;
       const isFailed=job.status==='FAILED';
       const isCompleted=job.status==='COMPLETED';
+      const isPaused=job.status==='PAUSED';
+      const isDeleted=job.status==='DELETED';
       let body=`<div class="hist-meta">
         <div class="hist-meta-row"><span class="hist-meta-label">Data</span><span class="hist-meta-value">${fmt(job.created_at)}</span></div>
         ${job.updated_at?`<div class="hist-meta-row"><span class="hist-meta-label">Fine</span><span class="hist-meta-value">${fmt(job.updated_at)}</span></div>`:''}
@@ -330,8 +454,45 @@
       if(isCompleted&&(job.output_json_url||job.output_txt_url)){
         body+=`<div>${job.output_json_url?resultLink(job.output_json_url,'json'):''}${job.output_txt_url?resultLink(job.output_txt_url,'txt'):''}</div>`;
       }
+      if(isCompleted){
+        body+=`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <a class="btn-action" href="speakers.html?job_id=${job.job_id}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Associa Speaker
+          </a>
+          <a class="btn-action" href="minutes.html?job_id=${job.job_id}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Genera Minuta
+          </a>
+          <button class="btn-delete delete-btn" data-job-id="${job.job_id}" style="margin-left:auto">${trashIcon} Elimina</button>
+        </div>`;
+      }
       if(isFailed){
-        body+=`<div class="error-box" style="margin-top:8px"><div class="error-title">Job fallito</div><div class="error-msg">${job.error||'Errore sconosciuto'}</div></div>`;
+        body+=`<div class="error-box" style="margin-top:8px"><div class="error-title">Job fallito</div><div class="error-msg">${job.error||'Errore sconosciuto'}</div></div>
+        <div style="margin-top:8px"><button class="btn-delete delete-btn" data-job-id="${job.job_id}">${trashIcon} Elimina</button></div>`;
+      }
+      if(isPaused){
+        const pausedStep=(job.step||'').replace(/^PAUSED_AT_/i,'').replace(/_/g,' ').toLowerCase();
+        body+=`<div class="paused-warning" style="margin-top:8px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/></svg>
+          <div class="paused-warning-text"><strong>Sospesa durante: ${pausedStep}</strong>Il job riparte dall'inizio — la trascrizione parziale non viene salvata.</div>
+        </div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+          <button class="btn-resume resume-btn" data-job-id="${job.job_id}">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Riprendi trascrizione
+          </button>
+          <button class="btn-delete delete-btn" data-job-id="${job.job_id}">${trashIcon} Elimina</button>
+          <span id="resume-err-${job.job_id}" style="display:none;font-size:11px;color:var(--error)"></span>
+        </div>`;
+      }
+      if(isDeleted){
+        body+=`<div style="margin-top:8px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;color:var(--text-muted)">
+          I file di questo job sono stati eliminati. Rimangono solo i metadati.
+        </div>
+        <div style="margin-top:8px">
+          <button class="btn-delete delete-btn" data-job-id="${job.job_id}" style="color:var(--error);border-color:#fecaca;background:var(--error-light)">${trashIcon} Elimina definitivamente</button>
+        </div>`;
       }
       return `<div class="hist-row ${isOpen?'open':''}" data-job-id="${job.job_id}">
         <div class="hist-row-header">
@@ -340,7 +501,6 @@
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
             ${badgeHtml(job.status)}
-            ${isCompleted ? ctxMenuHtml(job) : ''}
             <svg class="hist-chevron" style="cursor:pointer" onclick="toggleHist('${job.job_id}')" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
@@ -349,87 +509,45 @@
     }).join('');
   }
 
-  function ctxMenuHtml(job) {
-    return `<div class="ctx-menu-wrap">
-      <button class="ctx-btn" onclick="toggleCtx(event,'${job.job_id}')" title="Azioni">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
-        </svg>
-      </button>
-      <div class="ctx-menu" id="ctx-${job.job_id}">
-        <a class="ctx-item" href="speakers.html?job_id=${job.job_id}">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-          </svg>
-          Associa Speaker
-        </a>
-        <a class="ctx-item" href="minutes.html?job_id=${job.job_id}">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <polyline points="10 9 9 9 8 9"/>
-          </svg>
-          Genera Minuta
-        </a>
-        <div class="ctx-divider"></div>
-        ${job.output_json_url?`<a class="ctx-item" href="${job.output_json_url}" target="_blank" rel="noopener">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Scarica JSON
-        </a>`:''}
-        ${job.output_txt_url?`<a class="ctx-item" href="${job.output_txt_url}" target="_blank" rel="noopener">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Scarica TXT
-        </a>`:''}
-      </div>
-    </div>`;
-  }
-
-  function toggleCtx(e, jobId) {
-    e.stopPropagation();
-    const menu = document.getElementById(`ctx-${jobId}`);
-    const isOpen = menu.classList.contains('open');
-    closeAllCtx();
-    if (!isOpen) {
-      menu.classList.add('open');
-      $('ctx-overlay').style.display = 'block';
-    }
-  }
-  function closeAllCtx() {
-    document.querySelectorAll('.ctx-menu.open').forEach(m => m.classList.remove('open'));
-    $('ctx-overlay').style.display = 'none';
-  }
-  function toggleHist(id) { openHistId = openHistId === id ? null : id; renderAll(); }
+    function toggleHist(id) { openHistId = openHistId === id ? null : id; renderAll(); }
 
   function pipelineHtml(currentStep, status) {
-    const activeIdx = PIPELINE.findIndex(s=>(currentStep??'').toUpperCase().startsWith(s.key));
+    // Se PAUSED, ricava lo step reale rimuovendo il prefisso PAUSED_AT_
+    const effectiveStep = status === 'PAUSED'
+      ? (currentStep??'').replace(/^PAUSED_AT_/i, '')
+      : (currentStep??'');
+    const activeIdx = PIPELINE.findIndex(s => effectiveStep.toUpperCase().startsWith(s.key));
     return PIPELINE.map((s,i)=>{
       let state = 'pending';
       if(status==='COMPLETED') state='done';
-      else if(i<activeIdx) state='done';
+      else if(status==='PAUSED') {
+        // Pipeline congelata: tutto fino ad activeIdx è done, activeIdx è "paused" (mostrato come active ma senza animazione)
+        if(i < activeIdx)  state='done';
+        else if(i===activeIdx) state='active';
+      }
+      else if(i<activeIdx)  state='done';
       else if(i===activeIdx) state='active';
+      const pausedIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="#7c3aed"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>`;
       const icon = state==='done'
         ?`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
-        :state==='active'
-          ?`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5"><circle cx="12" cy="12" r="4" fill="var(--accent)"/></svg>`
-          :`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--border-hover)" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>`;
+        :state==='active' && status==='PAUSED'
+          ? pausedIcon
+          :state==='active'
+            ?`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5"><circle cx="12" cy="12" r="4" fill="var(--accent)"/></svg>`
+            :`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--border-hover)" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>`;
       const ic = state==='done'?'done-i':state==='active'?'active-i':'pending-i';
-      return `<div class="step-item ${state}"><div class="step-icon ${ic}">${icon}</div><span class="step-name">${s.label}</span></div>`;
+      const pausedStyle = (status==='PAUSED' && i===activeIdx) ? ' style="background:#f5f3ff"' : '';
+      return `<div class="step-item ${state}"><div class="step-icon ${ic}"${pausedStyle}>${icon}</div><span class="step-name">${s.label}</span></div>`;
     }).join('');
   }
 
   function badgeHtml(status) {
-    const map={PENDING:['pending','In attesa'],ENQUEUED:['pending','In coda'],WORKING:['working','In elaborazione'],COMPLETED:['completed','Completato'],FAILED:['failed','Fallito']};
+    const map={
+      PENDING:['pending','In attesa'], ENQUEUED:['pending','In coda'],
+      WORKING:['working','In elaborazione'], COMPLETED:['completed','Completato'],
+      FAILED:['failed','Fallito'], PAUSED:['paused','In pausa'],
+      DELETED:['deleted','Eliminato'],
+    };
     const [cls,lbl]=map[status]??['pending',status];
     return `<span class="status-badge ${cls}"><span class="dot"></span>${lbl}</span>`;
   }
@@ -437,6 +555,11 @@
   function calcPercent(step, status) {
     if(status==='COMPLETED') return 100;
     if(status==='FAILED') return null;
+    if(status==='PAUSED') {
+      // mostra la % dello step in cui è stato sospeso
+      const m=(step??'').match(/(\d+)pct/i); if(m) return parseInt(m[1]);
+      return null;
+    }
     const m=(step??'').match(/(\d+)pct/i); if(m) return parseInt(m[1]);
     const idx=PIPELINE.findIndex(s=>(step??'').toUpperCase().startsWith(s.key));
     if(idx>=0) return Math.round(((idx+0.5)/PIPELINE.length)*100);
@@ -487,6 +610,181 @@
   });
 
   function setLoading(on){submitBtn.disabled=on;submitBtn.classList.toggle('loading',on);}
+
+  async function pauseJob(jobId) {
+    const btn = document.getElementById('stop-btn-inner');
+    if (btn) { btn.disabled = true; btn.textContent = 'Interruzione…'; }
+    try {
+      const r = await fetch(`${API_BASE}/jobs/${jobId}/pause`, {method:'POST'});
+      const data = await r.json();
+      if (!r.ok) {
+        alert(`Impossibile fermare: ${data.detail || data.error}`);
+        if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> Interrompi'; }
+        return;
+      }
+      // Riconnette lo stream: il worker metterà PAUSED entro qualche secondo,
+      // il broker lo notificherà e renderAll aggiornerà l'UI
+      connectStream();
+    } catch(e) {
+      alert(`Errore: ${e.message}`);
+      if (btn) { btn.disabled = false; }
+    }
+  }
+
+  // Resume button — event delegation su history-container
+  document.addEventListener('click', async e => {
+    const btn = e.target.closest('.resume-btn');
+    if (!btn) return;
+    const jobId = btn.dataset.jobId;
+    const errEl = document.getElementById(`resume-err-${jobId}`) || document.getElementById(`current-resume-err-${jobId}`);
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Ripristino…';
+    if (errEl) errEl.style.display = 'none';
+    try {
+      const r = await fetch(`${API_BASE}/jobs/${jobId}/resume`, {method:'POST'});
+      const data = await r.json();
+      if (r.status === 410) {
+        if (errEl) {
+          errEl.textContent = '⚠ File audio rimosso — ricarica con "Nuovo Job"';
+          errEl.style.display = 'inline';
+        }
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+        if (jobsMap[jobId]) { jobsMap[jobId]._fileMissing = true; renderAll(); }
+      } else if (!r.ok) {
+        if (errEl) { errEl.textContent = data.detail || data.error || 'Errore'; errEl.style.display='inline'; }
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      } else {
+        if (jobsMap[jobId]) {
+          jobsMap[jobId].status = 'PENDING';
+          jobsMap[jobId].step = 'RESUMED';
+          renderAll();
+        }
+        connectStream();
+      }
+    } catch(e) {
+      if (errEl) { errEl.textContent = `Errore: ${e.message}`; errEl.style.display='inline'; }
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  });
+
+  // ── Delete popup overlay ──────────────────────────────────────────────────
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.delete-btn');
+    if (!btn) return;
+    const jobId = btn.dataset.jobId;
+    const job   = jobsMap[jobId] || {};
+    showDeleteModal(jobId, job.status || 'COMPLETED', `${job.customer||'?'} — ${job.project||'?'}`);
+  });
+
+  function showDeleteModal(jobId, status, title) {
+    // Rimuovi overlay precedente
+    document.getElementById('del-overlay')?.remove();
+
+    const isCompleted = status === 'COMPLETED';
+    const isPaused    = status === 'PAUSED';
+    const isFailed    = status === 'FAILED';
+    const isDeleted   = status === 'DELETED';
+
+    // Opzioni in base allo stato
+    let optsHtml = '';
+    if (!isDeleted) {
+      optsHtml += delOpt('audio', jobId,
+        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>`,
+        'Cancella audio',
+        'Rimuove il file audio originale (MinIO + disco). Trascrizione e RAG intatti.');
+      optsHtml += delOpt('transcript', jobId,
+        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+        'Cancella trascrizione',
+        'Rimuove audio + JSON/TXT da MinIO. Il RAG e i dati associati restano.');
+      optsHtml += delOpt('rag', jobId,
+        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`,
+        'Cancella tutto (mantieni storico)',
+        'Rimuove audio, trascrizione, RAG, speaker alias e minute. Il job resta nello storico come DELETED.',
+        true);
+    } else {
+      optsHtml += delOpt('purge', jobId,
+        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`,
+        'Elimina definitivamente',
+        'Rimuove ogni traccia del job da Redis e PostgreSQL. Irreversibile.',
+        true);
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'del-overlay';
+    overlay.className = 'del-overlay';
+    overlay.innerHTML = `
+      <div class="del-modal">
+        <div class="del-modal-header">
+          <div>
+            <div class="del-modal-title">Elimina dati</div>
+            <div class="del-modal-sub">${title}</div>
+          </div>
+          <button class="del-modal-close" id="del-close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="del-modal-body" id="del-modal-body">${optsHtml}</div>
+        <div class="del-modal-footer">
+          <button class="del-cancel" id="del-close-footer">Annulla</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    // Chiudi su X, Annulla, o click sfondo
+    overlay.querySelector('#del-close').onclick       = () => overlay.remove();
+    overlay.querySelector('#del-close-footer').onclick = () => overlay.remove();
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    // Click su opzione
+    overlay.querySelectorAll('.del-opt').forEach(opt => {
+      opt.addEventListener('click', () => execDelete(opt.dataset.jobId, opt.dataset.scope, overlay));
+    });
+  }
+
+  function delOpt(scope, jobId, icon, label, desc, danger=false) {
+    return `<button class="del-opt${danger?' danger':''}" data-scope="${scope}" data-job-id="${jobId}">
+      <div class="del-opt-icon">${icon}</div>
+      <div><div class="del-opt-label">${label}</div><div class="del-opt-desc">${desc}</div></div>
+    </button>`;
+  }
+
+  async function execDelete(jobId, scope, overlay) {
+    const body = overlay.querySelector('#del-modal-body');
+    body.innerHTML = `<div class="del-modal-status">Eliminazione in corso…</div>`;
+    overlay.querySelector('#del-close-footer').disabled = true;
+    try {
+      const r = await fetch(`${API_BASE}/jobs/${jobId}?scope=${scope}`, {method:'DELETE'});
+      const data = await r.json().catch(()=>({}));
+      if (!r.ok) {
+        body.innerHTML = `<div class="del-modal-status" style="color:var(--error)">Errore: ${data.detail||data.error||r.status}</div>`;
+        overlay.querySelector('#del-close-footer').disabled = false;
+        overlay.querySelector('#del-close-footer').textContent = 'Chiudi';
+        return;
+      }
+      // Aggiorna mappa locale
+      if (scope === 'purge') {
+        delete jobsMap[jobId];
+        if (openHistId === jobId) openHistId = null;
+      } else if (scope === 'rag') {
+        if (jobsMap[jobId]) { jobsMap[jobId].status='DELETED'; jobsMap[jobId].output_json_url=''; jobsMap[jobId].output_txt_url=''; jobsMap[jobId].audio_url=''; }
+      } else if (scope === 'transcript') {
+        if (jobsMap[jobId]) { jobsMap[jobId].output_json_url=''; jobsMap[jobId].output_txt_url=''; jobsMap[jobId].audio_url=''; }
+      } else if (scope === 'audio') {
+        if (jobsMap[jobId]) { jobsMap[jobId].audio_url=''; }
+      }
+      overlay.remove();
+      renderAll();
+    } catch(e) {
+      body.innerHTML = `<div class="del-modal-status" style="color:var(--error)">Errore: ${e.message}</div>`;
+      overlay.querySelector('#del-close-footer').disabled = false;
+      overlay.querySelector('#del-close-footer').textContent = 'Chiudi';
+    }
+  }
 </script>
 </body>
 </html>

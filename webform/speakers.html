@@ -8,6 +8,100 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <style>
+    /* ── Full-height layout — sovrascrive style.css ── */
+
+    html, body {
+      height: 100% !important;
+      overflow: hidden !important;
+    }
+    .app-shell {
+      height: 100vh !important;
+      min-height: unset !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    .page-header {
+      flex-shrink: 0;
+    }
+    main.page-main {
+      flex: 1 !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 12px !important;
+      padding-bottom: 20px !important;
+    }
+    .info-box {
+      flex-shrink: 0;
+    }
+
+    /* Grid 2 colonne */
+    #speakers-grid {
+      flex: 1;
+      min-height: 0;
+      display: grid !important;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      align-items: stretch;
+      overflow: hidden;
+    }
+
+    /* Colonna sinistra */
+    #panel-speakers {
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+      min-height: 0;
+    }
+    #panel-speakers .panel-body {
+      flex: 1 !important;
+      overflow-y: auto !important;
+      min-height: 0 !important;
+    }
+
+    /* Colonna destra */
+    #panel-transcript {
+      position: static !important;
+      top: auto !important;
+      max-height: none !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+      min-height: 0;
+    }
+    #panel-transcript .panel-header {
+      flex-shrink: 0;
+    }
+    #transcript-body {
+      flex: 1 !important;
+      overflow-y: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      padding: 16px 20px;
+    }
+
+    /* Toggle visibilità #content senza rompere display:flex */
+    .content-hidden { display: none !important; }
+    #content {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    @media (max-width: 900px) {
+      html, body       { overflow: auto !important; }
+      .app-shell       { height: auto !important; overflow: visible !important; }
+      main.page-main   { flex: none !important; overflow: visible !important; min-height: unset !important; }
+      #speakers-grid   { grid-template-columns: 1fr; overflow: visible; height: auto; flex: none; }
+      #panel-speakers  { overflow: visible !important; }
+      #panel-speakers .panel-body { overflow-y: visible !important; }
+      #panel-transcript { height: 420px; overflow: hidden !important; }
+    }
+
     /* ── Campione speaker ── */
     .sample-box {
       margin-top: 10px;
@@ -58,6 +152,26 @@
       font-size: 11px;
       color: var(--text-muted);
       font-style: italic;
+    }
+    /* ── Play button ── */
+    .spk-play-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 11px;
+      border-radius: 20px;
+      border: 1px solid var(--spk-color, var(--border));
+      background: transparent;
+      color: var(--spk-color, var(--text-secondary));
+      font-family: 'DM Sans', sans-serif;
+      font-size: 11px; font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background .15s, color .15s;
+    }
+    .spk-play-btn:hover {
+      background: color-mix(in srgb, var(--spk-color, var(--accent)) 12%, transparent);
+    }
+    .spk-play-btn.playing {
+      background: color-mix(in srgb, var(--spk-color, var(--accent)) 15%, transparent);
     }
   </style>
 </head>
@@ -127,7 +241,7 @@
     </div>
 
     <!-- Content -->
-    <div id="content" style="display:none">
+    <div id="content" class="content-hidden">
 
       <!-- Info box note -->
       <div class="info-box">
@@ -139,10 +253,10 @@
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+      <div id="speakers-grid">
 
         <!-- LEFT: Speaker cards -->
-        <div class="panel">
+        <div class="panel" id="panel-speakers">
           <div class="panel-header">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <span class="panel-title">Speaker Rilevati</span>
@@ -151,9 +265,9 @@
           <div class="panel-body" id="speakers-container"></div>
         </div>
 
-        <!-- RIGHT: Annotated transcript — sticky, full viewport height -->
-        <div class="panel" style="position:sticky;top:72px;max-height:calc(100vh - 92px);display:flex;flex-direction:column;overflow:hidden">
-          <div class="panel-header" style="flex-shrink:0">
+        <!-- RIGHT: Annotated transcript -->
+        <div class="panel" id="panel-transcript">
+          <div class="panel-header">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             <span class="panel-title">Trascrizione Annotata</span>
             <span class="panel-subtitle">Aggiornata in tempo reale</span>
@@ -162,7 +276,7 @@
               Audio coming soon
             </span>
           </div>
-          <div class="transcript-body" id="transcript-body" style="flex:1;overflow-y:auto;padding:16px 20px">
+          <div class="transcript-body" id="transcript-body">
             <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:12px">Trascrizione non disponibile</div>
           </div>
         </div>
@@ -175,6 +289,7 @@
 
 <script>
   const MINUTES_BASE = "http://localhost:9500";
+  const API_BASE     = "http://localhost:9200";
   const params = new URLSearchParams(location.search);
   const jobId  = params.get("job_id");
 
@@ -182,6 +297,15 @@
   let speakersData = [];
   let currentAliases = {};
   let transcriptSegments = [];  // segmenti reali da result.json
+
+  // ── Audio player state ────────────────────────────────────────────────────
+  let audioEl        = null;   // HTMLAudioElement condiviso
+  let audioUrl       = "";     // URL MinIO del file originale
+  let playingSpeaker = null;   // speaker_id in riproduzione
+  let speakerSegs    = {};     // speaker_id → [{start,end,...}] tutti i segmenti
+  let segQueue       = [];     // coda segmenti da riprodurre per lo speaker corrente
+  let segQueueIdx    = 0;
+  let highlightTimer = null;
 
   if (!jobId) {
     showError("Nessun job_id specificato nell'URL. Torna all'indice e riprova.");
@@ -201,15 +325,27 @@
         if (spk.name) currentAliases[spk.speaker_id] = {name: spk.name, company: spk.company || ""};
       }
       renderPageInfo(data);
-      // Carica il transcript PRIMA di renderizzare le card,
-      // così i campioni sono già disponibili
-      await loadTranscript();
+
+      // Carica transcript + audio_url da wx_api in parallelo
+      await Promise.all([loadTranscript(), loadAudioUrl()]);
+
       renderSpeakers(data);
       showLoading(false);
-      document.getElementById('content').style.display = 'block';
+      document.getElementById('content').classList.remove('content-hidden');
     } catch(e) {
       showLoading(false);
       showError(`Impossibile caricare i dati del job: ${e.message}`);
+    }
+  }
+
+  async function loadAudioUrl() {
+    try {
+      const resp = await fetch(`${API_BASE}/jobs/${jobId}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      audioUrl = data.audio_url || "";
+    } catch(e) {
+      console.warn('[speakers] audio_url load warning:', e.message);
     }
   }
 
@@ -237,8 +373,14 @@
       return;
     }
 
-    // Colori per speaker
     const colors = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#be185d','#65a30d'];
+
+    // Costruisce mappa speaker → segmenti (usata dal player)
+    speakerSegs = {};
+    for (const spk of data.speakers) {
+      speakerSegs[spk.speaker_id] = transcriptSegments
+        .filter(s => s.speaker === spk.speaker_id && s.text && s.text.trim());
+    }
 
     container.innerHTML = data.speakers.map((spk, i) => {
       const initials = spk.speaker_id.replace('SPEAKER_','S');
@@ -248,12 +390,10 @@
       const secs = Math.round(spk.duration_sec % 60);
       const duration = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
-      // Suggerimenti dello stesso cliente
       const suggs = (data.suggestions || [])
         .filter(s => s.name)
         .slice(0, 5);
 
-      // Campione: prendi i primi 3 segmenti di questo speaker dai dati già caricati
       const SAMPLE_N = 3;
       const samples = transcriptSegments
         .filter(s => s.speaker === spk.speaker_id && s.text && s.text.trim())
@@ -270,9 +410,7 @@
           </div>`
         ).join('');
         const moreCount = spk.segments - SAMPLE_N;
-        const moreHtml  = moreCount > 0
-          ? `<div class="sample-more">+ altri ${moreCount} interventi</div>`
-          : '';
+        const moreHtml  = moreCount > 0 ? `<div class="sample-more">+ altri ${moreCount} interventi</div>` : '';
         sampleHtml = `
         <div class="sample-box">
           <div class="sample-box-header">
@@ -285,6 +423,18 @@
         </div>`;
       }
 
+      // Bottone play — visibile solo se audio disponibile e speaker ha segmenti
+      const hasSegs = (speakerSegs[spk.speaker_id] || []).length > 0;
+      const playBtn = (audioUrl && hasSegs) ? `
+        <button class="spk-play-btn" id="play-btn-${spk.speaker_id}"
+          onclick="togglePlay('${spk.speaker_id}')"
+          title="Riproduci interventi di ${spk.speaker_id}"
+          style="--spk-color:${color}">
+          <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <svg class="stop-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          <span class="play-label">Ascolta</span>
+        </button>` : '';
+
       return `<div class="speaker-card ${mapped?'speaker-card-mapped':''}" id="card-${spk.speaker_id}" data-speaker="${spk.speaker_id}">
         <div class="speaker-card-header">
           <div class="speaker-avatar" style="${mapped?`background:${color}20;border-color:${color}40;color:${color}`:''}">${initials}</div>
@@ -292,6 +442,7 @@
             <div class="speaker-id">${spk.speaker_id}</div>
             <div class="speaker-stats">${spk.segments} interventi · ${duration}</div>
           </div>
+          ${playBtn}
           ${mapped?`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:''}
         </div>
         ${sampleHtml}
@@ -379,7 +530,7 @@
       }
     }
 
-    body.innerHTML = blocks.map(block => {
+    body.innerHTML = blocks.map((block, bi) => {
       const alias = currentAliases[block.speaker];
       const label = alias
         ? `${alias.name}${alias.company ? ` <span style="opacity:.55;font-weight:400">· ${escHtml(alias.company)}</span>` : ''}`
@@ -387,7 +538,7 @@
       const color = spkColor(block.speaker);
       const text  = block.texts.join(' ').trim();
 
-      return `<div style="margin-bottom:16px">
+      return `<div class="tx-block" id="tx-block-${bi}" data-speaker="${block.speaker}" data-start="${block.start}" data-end="${block.end}" style="margin-bottom:16px;border-radius:6px;padding:4px 6px 4px 0;transition:background .2s">
         <div class="transcript-speaker" style="color:${color};border-left:3px solid ${color}20;padding-left:8px;margin-bottom:4px">
           <span class="transcript-time">${fmtTime(block.start)}</span>
           ${label}
@@ -460,6 +611,110 @@
 
   function gotoMinutes() {
     location.href = `minutes.html?job_id=${jobId}`;
+  }
+
+  // ── Audio Player ───────────────────────────────────────────────────────────
+
+  function getOrCreateAudio() {
+    if (!audioEl) {
+      audioEl = new Audio();
+      audioEl.addEventListener('ended', onSegmentEnded);
+      audioEl.addEventListener('error', stopPlayer);
+    }
+    return audioEl;
+  }
+
+  function togglePlay(speakerId) {
+    if (playingSpeaker === speakerId) {
+      stopPlayer();
+    } else {
+      startPlayer(speakerId);
+    }
+  }
+
+  function startPlayer(speakerId) {
+    stopPlayer();   // ferma eventuale riproduzione precedente
+
+    const segs = speakerSegs[speakerId] || [];
+    if (!segs.length || !audioUrl) return;
+
+    playingSpeaker = speakerId;
+    segQueue       = segs;
+    segQueueIdx    = 0;
+
+    updatePlayBtn(speakerId, true);
+    playSegment(segQueueIdx);
+  }
+
+  function playSegment(idx) {
+    if (idx >= segQueue.length) { stopPlayer(); return; }
+
+    const seg = segQueue[idx];
+    const audio = getOrCreateAudio();
+
+    // Imposta src solo la prima volta o se cambia (evita re-download)
+    if (audio.src !== audioUrl) audio.src = audioUrl;
+
+    audio.currentTime = seg.start;
+    audio.play().catch(stopPlayer);
+
+    // Timer per staccare al termine del segmento
+    clearTimeout(highlightTimer);
+    const dur = (seg.end - seg.start) * 1000 + 150; // +150ms buffer
+    highlightTimer = setTimeout(onSegmentEnded, dur);
+
+    // Scroll + highlight del blocco trascrizione corrispondente
+    highlightBlock(seg.start, seg.end);
+  }
+
+  function onSegmentEnded() {
+    clearTimeout(highlightTimer);
+    if (!playingSpeaker) return;
+    segQueueIdx++;
+    if (segQueueIdx < segQueue.length) {
+      playSegment(segQueueIdx);
+    } else {
+      stopPlayer();
+    }
+  }
+
+  function stopPlayer() {
+    clearTimeout(highlightTimer);
+    if (audioEl) { audioEl.pause(); }
+    if (playingSpeaker) {
+      updatePlayBtn(playingSpeaker, false);
+      playingSpeaker = null;
+    }
+    clearHighlight();
+  }
+
+  function updatePlayBtn(speakerId, playing) {
+    const btn = document.getElementById(`play-btn-${speakerId}`);
+    if (!btn) return;
+    btn.querySelector('.play-icon').style.display = playing ? 'none'  : '';
+    btn.querySelector('.stop-icon').style.display = playing ? ''      : 'none';
+    btn.querySelector('.play-label').textContent  = playing ? 'Stop'  : 'Ascolta';
+    btn.classList.toggle('playing', playing);
+  }
+
+  function highlightBlock(segStart, segEnd) {
+    clearHighlight();
+    // Trova il blocco del transcript che contiene questo timestamp
+    document.querySelectorAll('.tx-block').forEach(el => {
+      const bStart = parseFloat(el.dataset.start);
+      const bEnd   = parseFloat(el.dataset.end);
+      const overlap = Math.min(segEnd, bEnd) - Math.max(segStart, bStart);
+      if (overlap > 0) {
+        el.style.background = 'var(--accent-light)';
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }
+
+  function clearHighlight() {
+    document.querySelectorAll('.tx-block').forEach(el => {
+      el.style.background = '';
+    });
   }
 
   function showLoading(on) {
