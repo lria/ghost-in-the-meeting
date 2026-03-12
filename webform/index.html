@@ -8,6 +8,11 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <style>
+    .header-nav { display: flex; gap: 4px; margin-left: 8px; }
+    .nav-link { font-size: 13px; font-weight: 500; color: var(--text-muted); padding: 5px 10px; border-radius: var(--radius-sm); text-decoration: none; transition: all 0.12s; }
+    .nav-link:hover { color: var(--text-primary); background: var(--surface-2); }
+    .nav-link.active { color: var(--text-primary); background: var(--surface-2); }
+
     /* ── Action buttons (accordion) ── */
     .btn-action {
       display: inline-flex; align-items: center; gap: 6px;
@@ -114,6 +119,35 @@
     .paused-warning-text strong { display:block; font-weight:600; margin-bottom:2px; }
 
     .paused-bar { background: #7c3aed !important; }
+
+    /* ── Badge "minuta in generazione" nella card storico ── */
+    .minutes-active-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: var(--radius-sm);
+      background: #f5f3ff; border: 1px solid #ddd6fe;
+      font-size: 11px; font-weight: 500; color: #6d28d9;
+    }
+    .minutes-active-badge .ma-spinner {
+      width: 10px; height: 10px; border: 2px solid #ddd6fe;
+      border-top-color: #7c3aed; border-radius: 50%;
+      animation: spin 0.7s linear infinite; flex-shrink: 0;
+    }
+    .minutes-active-badge .ma-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--warning); flex-shrink: 0;
+    }
+
+    /* ── File stack ── */
+    .files-stack { display:flex; flex-direction:column; gap:4px; margin-bottom:4px; }
+    .file-row { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface); }
+    .file-row-icon { width:22px; height:22px; border-radius:5px; display:grid; place-items:center; flex-shrink:0; }
+    .file-row-icon.json { background:#fff7ed; color:#c2410c; }
+    .file-row-icon.txt  { background:#f0fdf4; color:#15803d; }
+    .file-row-icon.md   { background:#f5f3ff; color:#7c3aed; }
+    .file-row-name { font-size:12px; font-weight:500; flex:1; color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .file-row-actions { display:flex; gap:4px; flex-shrink:0; }
+    .file-btn { display:grid; place-items:center; width:26px; height:26px; border-radius:5px; border:1px solid var(--border); background:var(--surface); color:var(--text-muted); text-decoration:none; transition:all .12s; cursor:pointer; }
+    .file-btn:hover { border-color:var(--border-hover); color:var(--text-primary); background:var(--surface-2); }
   </style>
 </head>
 <body>
@@ -130,7 +164,11 @@
       </div>
       Minute
     </div>
-    <span class="header-badge">Transcription</span>
+    <nav class="header-nav">
+      <a href="index.html" class="nav-link active">Trascrizioni</a>
+      <a href="speakers.html" class="nav-link" id="nav-speakers">Speaker</a>
+      <a href="minutes.html" class="nav-link" id="nav-minutes">Minuta</a>
+    </nav>
     <div class="header-stack">
       <div class="stack-pill"><span class="dot" id="api-dot"></span>whisperx</div>
       <div class="stack-pill"><span class="dot" id="sse-dot"></span>sse broker</div>
@@ -307,7 +345,7 @@
   const API_BASE    = "http://localhost:9200";
   const N8N_INGEST  = "http://localhost:5678/webhook/minute/ingest";
   const SSE_BASE    = "http://localhost:9400";
-  const MINUTES_BASE = "http://localhost:9500";
+  const MINUTES_API = "http://localhost:9600";
 
   let diarize = true, eventSource = null, jobsMap = {}, openHistId = null;
 
@@ -336,7 +374,7 @@
   async function checkHealth() {
     try { const r = await fetch(`${API_BASE}/health`,{signal:AbortSignal.timeout(3000)}); $('api-dot').className=r.ok?'dot live':'dot'; } catch { $('api-dot').className='dot'; }
     try { const r = await fetch(`${SSE_BASE}/health`,{signal:AbortSignal.timeout(3000)}); $('sse-dot').className=r.ok?'dot live':'dot'; } catch { $('sse-dot').className='dot'; }
-    try { const r = await fetch(`${MINUTES_BASE}/health`,{signal:AbortSignal.timeout(3000)}); $('minutes-dot').className=r.ok?'dot live':'dot'; } catch { $('minutes-dot').className='dot'; }
+    try { const r = await fetch(`${MINUTES_API}/health`,{signal:AbortSignal.timeout(3000)}); $('minutes-dot').className=r.ok?'dot live':'dot'; } catch { $('minutes-dot').className='dot'; }
   }
 
   async function loadInitialJobs() {
@@ -344,8 +382,40 @@
       const r = await fetch(`${SSE_BASE}/jobs`); if(!r.ok) return;
       const data = await r.json();
       for (const job of data.jobs) jobsMap[job.job_id] = job;
+      // Arricchisci con minutes_url se disponibile
+      await enrichWithMinutes();
       renderAll();
     } catch(e) { console.warn('[Minute] SSE broker non raggiungibile:', e.message); }
+  }
+
+  async function enrichWithMinutes() {
+    try {
+      const r = await fetch(`${MINUTES_API}/minutes/jobs?limit=100`);
+      if (!r.ok) return;
+      const data = await r.json();
+      // Reset: cancella stato minuta attiva su tutti i job prima di riscrivere
+      for (const j of Object.values(jobsMap)) {
+        j.minutes_active = null;
+      }
+      for (const m of (data.jobs || [])) {
+        if (!m.job_id) continue;
+        if (m.status === 'COMPLETED' && m.output_url) {
+          const url = m.output_url.replace(/^http:\/\/minio:9000/, 'http://localhost:9000');
+          if (jobsMap[m.job_id]) {
+            jobsMap[m.job_id].minutes_url   = url;
+            jobsMap[m.job_id].minutes_label = url.split('/').pop() || 'minuta.md';
+          }
+        }
+        // Salva il job minutes attivo (PENDING o WORKING) associato a questa trascrizione
+        if ((m.status === 'PENDING' || m.status === 'WORKING') && jobsMap[m.job_id]) {
+          jobsMap[m.job_id].minutes_active = {
+            status:   m.status,
+            step:     m.step || '',
+            template: m.template || '',
+          };
+        }
+      }
+    } catch { /* silenzioso se minutes_api non disponibile */ }
   }
 
   function connectStream() {
@@ -353,10 +423,13 @@
     eventSource = new EventSource(`${SSE_BASE}/events?all=1`);
     setStreamStatus('connecting');
     eventSource.addEventListener('open', () => { setStreamStatus('connected'); $('sse-dot').className='dot live'; });
-    eventSource.addEventListener('job_update', e => { const job=JSON.parse(e.data); jobsMap[job.job_id]=job; renderAll(); });
+    eventSource.addEventListener('job_update', e => { const job=JSON.parse(e.data); jobsMap[job.job_id]=job; if(job.status==='COMPLETED') enrichWithMinutes().then(renderAll); else renderAll(); });
     eventSource.addEventListener('stream_end', () => { setStreamStatus('idle'); setTimeout(connectStream,10000); });
     eventSource.addEventListener('error', () => { setStreamStatus('error'); $('sse-dot').className='dot'; eventSource.close(); setTimeout(connectStream,8000); });
   }
+
+  // Polling minuta: aggiorna badge "in generazione" anche senza eventi SSE di trascrizione
+  setInterval(() => enrichWithMinutes().then(renderAll), 8000);
 
   function setStreamStatus(state) {
     const map={connecting:['stream-connecting','Connessione…'],connected:['stream-live','Live'],idle:['stream-idle','In attesa'],error:['stream-error','Disconnesso']};
@@ -451,18 +524,39 @@
         ${job.updated_at?`<div class="hist-meta-row"><span class="hist-meta-label">Fine</span><span class="hist-meta-value">${fmt(job.updated_at)}</span></div>`:''}
         <div class="hist-meta-row"><span class="hist-meta-label">Stato</span><span class="hist-meta-value">${badgeHtml(job.status)}</span></div>
       </div>`;
-      if(isCompleted&&(job.output_json_url||job.output_txt_url)){
-        body+=`<div>${job.output_json_url?resultLink(job.output_json_url,'json'):''}${job.output_txt_url?resultLink(job.output_txt_url,'txt'):''}</div>`;
+      if(isCompleted&&(job.output_json_url||job.output_txt_url||job.minutes_url)){
+        body+=`<div class="files-stack">${
+          [
+            job.output_json_url ? fileRow(job.output_json_url,'json','result.json') : '',
+            job.output_txt_url  ? fileRow(job.output_txt_url,'txt','result.txt') : '',
+            job.minutes_url     ? fileRow(job.minutes_url,'md', job.minutes_label || 'minuta.md') : '',
+          ].join('')
+        }</div>`;
       }
       if(isCompleted){
+        // Badge "minuta in generazione" se c'è un job minutes attivo per questo job
+        if (job.minutes_active) {
+          const ma = job.minutes_active;
+          const isWorking = ma.status === 'WORKING';
+          const stepText  = ma.step ? ma.step.replace(/_/g,' ').toLowerCase() : '';
+          const indicator = isWorking
+            ? `<span class="ma-spinner"></span>`
+            : `<span class="ma-dot"></span>`;
+          const label = isWorking
+            ? `Minuta in generazione${stepText ? ` — ${stepText}` : ''}…`
+            : `Minuta in coda…`;
+          body += `<div style="margin-bottom:8px">
+            <span class="minutes-active-badge">${indicator}${label}</span>
+          </div>`;
+        }
         body+=`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
           <a class="btn-action" href="speakers.html?job_id=${job.job_id}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             Associa Speaker
           </a>
-          <a class="btn-action" href="minutes.html?job_id=${job.job_id}">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-            Genera Minuta
+          <a class="btn-action" href="minutes.html?job_id=${job.job_id}" style="${job.minutes_url?'border-color:#ddd6fe;color:#7c3aed;background:#f5f3ff':''}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            ${job.minutes_url ? 'Gestisci minuta' : 'Genera minuta'}
           </a>
           <button class="btn-delete delete-btn" data-job-id="${job.job_id}" style="margin-left:auto">${trashIcon} Elimina</button>
         </div>`;
@@ -576,6 +670,26 @@
       <div><div class="result-name">${label}</div><div class="result-meta">${meta} · MinIO</div></div>
       <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
     </a>`;
+  }
+
+  function fileRow(url, type, label) {
+    const icons = {
+      json: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+      txt:  `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+      md:   `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+    };
+    const eyeIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    const dlIcon  = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+    // filename from URL for download attribute
+    const filename = url.split('/').pop() || label;
+    return `<div class="file-row">
+      <div class="file-row-icon ${type}">${icons[type]||''}</div>
+      <span class="file-row-name">${label}</span>
+      <div class="file-row-actions">
+        <a class="file-btn" href="${url}" target="_blank" rel="noopener" title="Apri">${eyeIcon}</a>
+        <a class="file-btn" href="${url}" download="${filename}" title="Scarica">${dlIcon}</a>
+      </div>
+    </div>`;
   }
 
   /* ── Form ── */

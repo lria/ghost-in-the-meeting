@@ -44,6 +44,12 @@ header {
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-hover); flex-shrink: 0; }
 .dot.live { background: var(--success); box-shadow: 0 0 0 2px var(--success-light); }
 
+/* ── Header nav ── */
+.header-nav { display: flex; gap: 4px; margin-left: 8px; }
+.nav-link { font-size: 13px; font-weight: 500; color: var(--text-muted); padding: 5px 10px; border-radius: var(--radius-sm); text-decoration: none; transition: all 0.12s; }
+.nav-link:hover { color: var(--text-primary); background: var(--surface-2); }
+.nav-link.active { color: var(--text-primary); background: var(--surface-2); }
+
 /* ── Page header (per pagine interne) ── */
 .page-header { padding: 24px 28px 0; max-width: 1200px; margin: 0 auto; width: 100%; }
 .page-header-inner { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }

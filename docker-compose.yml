@@ -173,6 +173,7 @@ services:
       - NLTK_DATA=/usr/local/share/nltk_data
       # Storage
       - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_PUBLIC_URL=http://localhost:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - MINIO_BUCKET=wx-transcriptions
@@ -189,6 +190,7 @@ services:
       - TOKENIZERS_PARALLELISM=false
       - NNPACK=0
       - ORT_LOGGING_LEVEL=3
+      - RAG_QUEUE_KEY=rag:queue
     volumes:
       - ./data/uploads:/app/data
       - ./data/whisper_models:/app/wx_models
@@ -257,9 +259,54 @@ services:
       - redis
 
 
-  # ── Minutes API ──────────────────────────────────────────────────────────────
-  # Gestisce speaker rename, generazione minuta via Ollama, RAG su Qdrant.
-  # Nessuna modifica a wx_api, wx_worker, sse_broker.
+  # ── Transcriber API ───────────────────────────────────────────────────────────
+  # ex minutes_api — speaker rename + lettura trascrizioni da MinIO.
+  # File rinominato: minutes_api.py → transcriber_api.py
+  transcriber_api:
+    build:
+      context: .
+      dockerfile: minutes/dockerfile.minutes
+    container_name: n8n_transcriber_api
+    restart: unless-stopped
+    platform: linux/arm64
+    command:
+      - bash
+      - -lc
+      - |
+        exec uvicorn transcriber_api:app --host 0.0.0.0 --port 8000 --workers 1
+    environment:
+      - TZ=${TZ}
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO_BUCKET=wx-transcriptions
+      - MINIO_SECURE=false
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=${POSTGRES_DB}
+      - PGUSER=${POSTGRES_USER}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - PROMPTS_DIR=/app/prompts
+      - TOKENIZERS_PARALLELISM=false
+      - OMP_NUM_THREADS=2
+    volumes:
+      - ./minutes/transcriber_api.py:/app/transcriber_api.py:ro
+      - ./minutes/templates:/app/templates:ro
+      - ./data/embeddings_cache:/root/.cache
+    ports:
+      - "9500:8000"
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  # ── Minutes API (AI) ──────────────────────────────────────────────────────────
+  # Nuovo servizio AI — crea e monitora job di generazione minuta.
+  # Coda Redis: minutes:queue → consumata da minutes_worker.
   minutes_api:
     build:
       context: .
@@ -275,35 +322,127 @@ services:
     environment:
       - TZ=${TZ}
       - REDIS_URL=redis://redis:6379/0
+      - MINUTES_QUEUE_KEY=minutes:queue
       - OLLAMA_URL=http://ollama:11434
-      - QDRANT_URL=http://qdrant:6333
-      - QDRANT_COLLECTION=meeting_minutes
-      - EMBED_MODEL=all-MiniLM-L6-v2
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - MINIO_BUCKET=wx-transcriptions
-      - MINIO_SECURE=false
+      - MINUTES_TEMPLATES_DIR=/app/templates
       - PGHOST=postgres
       - PGPORT=5432
       - PGDATABASE=${POSTGRES_DB}
       - PGUSER=${POSTGRES_USER}
       - PGPASSWORD=${POSTGRES_PASSWORD}
-      - PROMPTS_DIR=/app/prompts
-      - TOKENIZERS_PARALLELISM=false
-      - OMP_NUM_THREADS=2
     volumes:
       - ./minutes/minutes_api.py:/app/minutes_api.py:ro
-      - ./minutes/prompts:/app/prompts:ro
-      - ./data/embeddings_cache:/root/.cache  # cache modello embeddings (~80MB)
+      - ./minutes/templates:/app/templates:ro
     ports:
-      - "9500:8000"
+      - "9600:8000"
     depends_on:
-      - redis
-      - postgres
-      - minio
-      - ollama
-      - qdrant
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
+  # ── Minutes Worker ────────────────────────────────────────────────────────────
+  # Consuma minutes:queue — RAG retrieval Qdrant + generazione Ollama + upload MinIO.
+  minutes_worker:
+    build:
+      context: .
+      dockerfile: minutes/dockerfile.minutes
+    container_name: n8n_minutes_worker
+    restart: unless-stopped
+    platform: linux/arm64
+    command:
+      - bash
+      - -lc
+      - |
+        exec python minutes_worker.py
+    environment:
+      - TZ=${TZ}
+      - REDIS_URL=redis://redis:6379/0
+      - MINUTES_QUEUE_KEY=minutes:queue
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_PUBLIC_URL=http://localhost:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO_BUCKET=wx-transcriptions
+      - MINUTES_BUCKET=minutes
+      - MINIO_SECURE=false
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=transcriptions
+      - OLLAMA_URL=http://ollama:11434
+      - EMBED_MODEL=nomic-embed-text
+      - RAG_TOP_K=8
+      - MINUTES_TEMPLATES_DIR=/app/templates
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=${POSTGRES_DB}
+      - PGUSER=${POSTGRES_USER}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ./minutes/minutes_worker.py:/app/minutes_worker.py:ro
+      - ./minutes/templates:/app/templates:ro
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_started
+
+  # ── RAG Indexer ───────────────────────────────────────────────────────────────
+  # Ascolta rag:queue — chunking + embedding + upsert su Qdrant.
+  # Alimentato da wx_worker al completamento di ogni trascrizione.
+  rag_indexer:
+    build:
+      context: .
+      dockerfile: minutes/dockerfile.minutes
+    container_name: n8n_rag_indexer
+    restart: unless-stopped
+    platform: linux/arm64
+    command:
+      - bash
+      - -lc
+      - |
+        exec python rag_indexer.py
+    environment:
+      - TZ=${TZ}
+      - REDIS_URL=redis://redis:6379/0
+      - RAG_QUEUE_KEY=rag:queue
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO_BUCKET=wx-transcriptions
+      - MINIO_SECURE=false
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=transcriptions
+      - OLLAMA_URL=http://ollama:11434
+      - EMBED_MODEL=nomic-embed-text
+      - EMBED_DIM=768
+      - RAG_CHUNK_SIZE_SEGS=5
+      - RAG_CHUNK_OVERLAP=1
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=${POSTGRES_DB}
+      - PGUSER=${POSTGRES_USER}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ./minutes/rag_indexer.py:/app/rag_indexer.py:ro
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_started
 
 
   # ── Webform ───────────────────────────────────────────────────────────────

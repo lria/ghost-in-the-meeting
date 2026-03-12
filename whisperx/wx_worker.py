@@ -28,6 +28,7 @@ from botocore.exceptions import ClientError
 
 REDIS_URL         = os.getenv("REDIS_URL",            "redis://redis:6379/0")
 QUEUE_KEY         = os.getenv("WX_QUEUE_KEY",         "wx:queue")
+RAG_QUEUE_KEY     = os.getenv("RAG_QUEUE_KEY",        "rag:queue")
 BLPOP_TIMEOUT     = int(os.getenv("WX_BLPOP_TIMEOUT", "5"))
 STALE_WORKING_SEC = int(os.getenv("WX_STALE_SEC",     str(45 * 60)))
 
@@ -42,7 +43,8 @@ WHISPER_DEVICE    = os.getenv("WHISPER_DEVICE",       "cpu")
 WHISPER_COMPUTE   = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 HF_TOKEN          = os.getenv("HF_TOKEN",             "")
 
-MINIO_ENDPOINT    = os.getenv("MINIO_ENDPOINT",       "http://minio:9000")
+MINIO_ENDPOINT    = os.getenv("MINIO_ENDPOINT",       "http://minio:9000")   # boto3 — interno Docker
+MINIO_PUBLIC_URL  = os.getenv("MINIO_PUBLIC_URL",     "http://localhost:9000") # URL salvato in DB/Redis
 MINIO_ACCESS_KEY  = os.getenv("MINIO_ACCESS_KEY",     "minioadmin")
 MINIO_SECRET_KEY  = os.getenv("MINIO_SECRET_KEY",     "minioadmin")
 MINIO_BUCKET      = os.getenv("MINIO_BUCKET",         "wx-transcriptions")
@@ -462,7 +464,7 @@ def run_job(job_id: str, fw_model, diar_pipeline):
             update_job(job_id, step="UPLOADING_JSON")
             s3.upload_file(str(result_path), MINIO_BUCKET, minio_key,
                            ExtraArgs={"ContentType": "application/json"})
-            minio_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET}/{minio_key}"
+            minio_url = f"{MINIO_PUBLIC_URL}/{MINIO_BUCKET}/{minio_key}"
             print(f"[worker] upload JSON OK: {minio_url}", flush=True)
         except Exception as e:
             print(f"[worker] ⚠ MinIO JSON warning job {job_id}: {e}", flush=True)
@@ -521,7 +523,7 @@ def run_job(job_id: str, fw_model, diar_pipeline):
             update_job(job_id, step="UPLOADING_TXT")
             s3.upload_file(str(txt_path), MINIO_BUCKET, minio_txt_key,
                            ExtraArgs={"ContentType": "text/plain; charset=utf-8"})
-            minio_txt_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET}/{minio_txt_key}"
+            minio_txt_url = f"{MINIO_PUBLIC_URL}/{MINIO_BUCKET}/{minio_txt_key}"
             print(f"[worker] upload TXT OK: {minio_txt_url}", flush=True)
         except Exception as e:
             print(f"[worker] ⚠ MinIO TXT warning job {job_id}: {e}", flush=True)
@@ -534,7 +536,7 @@ def run_job(job_id: str, fw_model, diar_pipeline):
         audio_ext       = Path(input_file).suffix or ".bin"
         minio_audio_key = f"{customer}/{project}/{minio_folder}/audio_original{audio_ext}"
         s3.upload_file(str(input_file), MINIO_BUCKET, minio_audio_key)
-        minio_audio_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET}/{minio_audio_key}"
+        minio_audio_url = f"{MINIO_PUBLIC_URL}/{MINIO_BUCKET}/{minio_audio_key}"
         print(f"[worker] upload AUDIO OK: {minio_audio_url}", flush=True)
     except Exception as e:
         print(f"[worker] ⚠ MinIO AUDIO warning job {job_id}: {e}", flush=True)
@@ -549,6 +551,10 @@ def run_job(job_id: str, fw_model, diar_pipeline):
               output_json_url=minio_url or minio_txt_url,
               audio_url=minio_audio_url,
               finished_at=utc_now())
+
+    # Accoda per indicizzazione RAG (rag_indexer consuma rag:queue)
+    r.rpush(RAG_QUEUE_KEY, job_id)
+    print(f"[worker] → rag:queue {job_id}", flush=True)
 
     print(f"[worker] ✓ job {job_id} COMPLETED", flush=True)
     if minio_url:       print(f"  JSON:  {minio_url}", flush=True)

@@ -6,25 +6,307 @@
   <title>Minute — Genera Minuta</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
   <style>
-    .rag-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent); background: var(--accent-light); border: 1px solid #bfdbfe; padding: 2px 8px; border-radius: 4px; }
-    .rag-count.none { color: var(--text-muted); background: var(--surface-2); border-color: var(--border); }
-    .version-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .version-pill { font-size: 11px; padding: 3px 10px; border-radius: 20px; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; transition: all 0.12s; }
-    .version-pill:hover { border-color: var(--accent); color: var(--accent); }
-    .version-pill.active { background: var(--accent); border-color: var(--accent); color: white; }
-    .empty-preview { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; }
-    .empty-preview-icon { width: 48px; height: 48px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; display: grid; place-items: center; margin-bottom: 12px; }
-    .speakers-warning { background: var(--warning-light); border: 1px solid #fde68a; border-radius: var(--radius); padding: 10px 14px; display: flex; gap: 9px; align-items: flex-start; }
-    .speakers-warning-text { font-size: 12px; color: #92400e; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:            #f8f9fb;
+      --surface:       #ffffff;
+      --surface-2:     #f3f4f6;
+      --border:        #e5e7eb;
+      --border-hover:  #d1d5db;
+      --text-primary:  #111827;
+      --text-secondary:#374151;
+      --text-muted:    #9ca3af;
+      --accent:        #2563eb;
+      --accent-light:  #eff6ff;
+      --success:       #16a34a;
+      --success-light: #dcfce7;
+      --warning:       #d97706;
+      --warning-light: #fef3c7;
+      --error:         #dc2626;
+      --error-light:   #fee2e2;
+      --purple:        #7c3aed;
+      --purple-light:  #f5f3ff;
+      --radius:        10px;
+      --radius-sm:     6px;
+      --radius-lg:     14px;
+      --shadow-sm:     0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    }
+
+    html, body { height: 100%; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text-primary); font-size: 14px; line-height: 1.5; }
+
+    /* ── Shell ── */
+    .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; padding: 0 28px; gap: 12px;
+      height: 56px; position: sticky; top: 0; z-index: 10; flex-shrink: 0;
+    }
+    .logo { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; letter-spacing: -0.02em; color: var(--text-primary); text-decoration: none; }
+    .logo-icon { width: 28px; height: 28px; background: var(--text-primary); border-radius: 8px; display: grid; place-items: center; }
+    .logo-icon svg { color: white; }
+    .header-badge { font-size: 11px; font-weight: 500; padding: 2px 8px; background: var(--purple-light); color: var(--purple); border-radius: 20px; }
+    .header-nav { display: flex; gap: 4px; margin-left: 16px; }
+    .nav-link { font-size: 13px; font-weight: 500; color: var(--text-muted); padding: 5px 10px; border-radius: var(--radius-sm); text-decoration: none; transition: all 0.12s; }
+    .nav-link:hover { color: var(--text-primary); background: var(--surface-2); }
+    .nav-link.active { color: var(--text-primary); background: var(--surface-2); }
+    .header-stack { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .stack-pill { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); padding: 3px 8px; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 5px; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-hover); flex-shrink: 0; }
+    .dot.live { background: var(--success); box-shadow: 0 0 0 2px var(--success-light); }
+    .dot.warn { background: var(--warning); }
+
+    /* ── Main ── */
+    main { display: grid; grid-template-columns: 440px 1fr; gap: 24px; padding: 28px; max-width: 1240px; width: 100%; margin: 0 auto; align-items: start; flex: 1; }
+
+    /* ── Panel ── */
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+    .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .panel-subtitle { font-size: 11px; color: var(--text-muted); }
+    .panel-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── Form ── */
+    label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; letter-spacing: 0.01em; }
+    .req { display: inline-block; width: 4px; height: 4px; background: var(--accent); border-radius: 50%; margin-left: 4px; vertical-align: middle; transform: translateY(-1px); }
+    input[type=text], select {
+      width: 100%; padding: 8px 11px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text-primary);
+      transition: border-color 0.15s, box-shadow 0.15s; outline: none;
+    }
+    input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    .hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* ── Job selector ── */
+    .job-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; transition: all 0.12s; display: flex; align-items: center; gap: 12px; }
+    .job-card:hover { border-color: var(--accent); background: var(--accent-light); }
+    .job-card.selected { border-color: var(--accent); background: var(--accent-light); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    .job-card-info { flex: 1; min-width: 0; }
+    .job-card-name { font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .job-card-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+    .job-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; padding-right: 2px; }
+    .job-list::-webkit-scrollbar { width: 4px; }
+    .job-list::-webkit-scrollbar-track { background: transparent; }
+    .job-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .jobs-loading { text-align: center; padding: 24px; color: var(--text-muted); font-size: 12px; }
+    .jobs-empty { text-align: center; padding: 24px; color: var(--text-muted); font-size: 12px; }
+
+    /* ── Template cards ── */
+    .template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tpl-card { border: 1.5px solid var(--border); border-radius: var(--radius); padding: 10px 12px; cursor: pointer; transition: all 0.12s; position: relative; }
+    .tpl-card:hover { border-color: var(--accent); }
+    .tpl-card.selected { border-color: var(--accent); background: var(--accent-light); }
+    .tpl-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+    .tpl-card-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+    .tpl-card-desc { font-size: 10px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+    .tpl-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+    .tpl-tag { font-size: 10px; font-weight: 500; padding: 1px 7px; border-radius: 20px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); }
+    .tpl-card.selected .tpl-tag { background: #dbeafe; border-color: #bfdbfe; color: var(--accent); }
+    .tpl-info-btn { flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 9px; font-weight: 700; display: grid; place-items: center; cursor: default; position: relative; }
+    .tpl-info-btn:hover .tpl-tooltip { display: block; }
+    .tpl-tooltip { display: none; position: absolute; bottom: 22px; right: 0; width: 220px; background: var(--text-primary); color: white; font-size: 11px; line-height: 1.5; padding: 8px 10px; border-radius: var(--radius-sm); z-index: 100; font-weight: 400; pointer-events: none; }
+    .tpl-tooltip::after { content:''; position:absolute; bottom:-4px; right:5px; width:8px; height:8px; background:var(--text-primary); transform:rotate(45deg); }
+
+    /* ── Context level ── */
+    .ctx-list { display: flex; flex-direction: column; gap: 6px; }
+    .ctx-item { border: 1.5px solid var(--border); border-radius: var(--radius); padding: 10px 13px; cursor: pointer; transition: all 0.12s; display: flex; align-items: flex-start; gap: 10px; }
+    .ctx-item:hover { border-color: var(--purple); }
+    .ctx-item.selected { border-color: var(--purple); background: var(--purple-light); }
+    .ctx-radio { width: 14px; height: 14px; border: 2px solid var(--border); border-radius: 50%; flex-shrink: 0; margin-top: 2px; transition: all 0.12s; display: grid; place-items: center; }
+    .ctx-item.selected .ctx-radio { border-color: var(--purple); background: var(--purple); }
+    .ctx-item.selected .ctx-radio::after { content:''; width: 5px; height: 5px; background: white; border-radius: 50%; }
+    .ctx-label { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+    .ctx-desc  { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+    /* ── Model selector ── */
+    .model-list { display: flex; flex-direction: column; gap: 6px; }
+    .model-item { border: 1.5px solid var(--border); border-radius: var(--radius); padding: 10px 13px; cursor: pointer; transition: all 0.12s; display: flex; align-items: center; gap: 10px; }
+    .model-item:hover:not(.disabled) { border-color: var(--accent); }
+    .model-item.selected { border-color: var(--accent); background: var(--accent-light); }
+    .model-item.disabled { opacity: 0.5; cursor: not-allowed; }
+    .model-name { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; color: var(--text-primary); }
+    .model-size { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+    .model-note { font-size: 10px; color: var(--text-muted); margin-top: 1px; font-style: italic; }
+    .model-badge-installed { font-size: 9px; font-weight: 600; padding: 1px 6px; background: var(--success-light); color: var(--success); border-radius: 20px; margin-left: auto; flex-shrink: 0; }
+    .model-badge-pull { font-size: 9px; font-weight: 600; padding: 3px 9px; background: var(--accent); color: white; border-radius: 20px; margin-left: auto; flex-shrink: 0; cursor: pointer; border: none; font-family: 'DM Sans', sans-serif; display: flex; align-items: center; gap: 5px; transition: all 0.15s; }
+    .model-badge-pull:hover:not(:disabled) { background: #1d4ed8; transform: translateY(-1px); }
+    .model-badge-pull:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .model-badge-pull .pull-spinner { width: 9px; height: 9px; border: 1.5px solid rgba(255,255,255,.4); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite; display: none; }
+    .model-badge-pull .pull-label { display: none; }
+    .model-badge-pull.pulling .pull-spinner { display: block; }
+    .model-badge-pull.pulling .pull-label { display: inline; }
+    .model-badge-pull.pulling .pull-icon { display: none; }
+    .model-badge-done { font-size: 9px; font-weight: 600; padding: 3px 9px; background: var(--success-light); color: var(--success); border-radius: 20px; margin-left: auto; flex-shrink: 0; }
+    .ollama-offline { background: var(--warning-light); border: 1px solid #fcd34d; border-radius: var(--radius); padding: 10px 13px; font-size: 12px; color: var(--warning); display: flex; align-items: center; gap: 8px; }
+
+    /* ── Submit ── */
+    .btn-submit { width: 100%; padding: 11px 20px; background: var(--purple); color: white; border: none; border-radius: var(--radius); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; }
+    .btn-submit:hover { background: #6d28d9; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(124,58,237,.25); }
+    .btn-submit:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-submit .spinner { display: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    .btn-submit.loading .spinner { display: block; }
+
+    /* ── Right panel ── */
+    .right-panel { display: flex; flex-direction: column; gap: 16px; }
+
+    /* Status card */
+    .status-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+    .status-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 20px; text-align: center; }
+    .status-empty-icon { width: 50px; height: 50px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; display: grid; place-items: center; margin-bottom: 12px; }
+    .status-empty-title { font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; }
+    .status-empty-sub { font-size: 12px; color: var(--text-muted); }
+
+    /* Job info row */
+    .job-info-row { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 12px; }
+    .job-info-main { flex: 1; min-width: 0; }
+    .job-info-title { font-size: 13px; font-weight: 600; color: var(--text-primary); line-height: 1.4; margin-bottom: 6px; }
+    .job-info-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+    .tag { font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-muted); background: var(--surface-2); }
+    .tag.purple { border-color: #ddd6fe; color: var(--purple); background: var(--purple-light); }
+
+    /* Progress */
+    .progress-row { padding: 14px 20px; border-bottom: 1px solid var(--border); }
+    .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .progress-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    .step-chip { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; }
+    .progress-track { height: 5px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--purple); border-radius: 99px; transition: width 0.6s; }
+    .progress-fill.indeterminate { width: 40%; animation: indeterminate 1.4s ease-in-out infinite; }
+    @keyframes indeterminate { 0%{transform:translateX(-100%)} 100%{transform:translateX(350%)} }
+
+    /* Pipeline steps */
+    .pipeline-row { padding: 14px 20px; border-bottom: 1px solid var(--border); }
+    .section-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
+    .steps-list { display: flex; flex-direction: column; gap: 1px; }
+    .step-item { display: flex; align-items: center; gap: 11px; padding: 6px 8px; border-radius: var(--radius-sm); }
+    .step-item.done { }
+    .step-item.active { background: var(--purple-light); }
+    .step-item.pending { opacity: 0.35; }
+    .step-icon { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+    .done-i   { background: var(--success-light); }
+    .active-i { background: var(--purple-light); animation: pulse-icon 1.2s ease-in-out infinite; }
+    .pending-i { background: var(--surface-2); }
+    @keyframes pulse-icon { 0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.3)} 50%{box-shadow:0 0 0 4px rgba(124,58,237,.1)} }
+    .step-name { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+    .step-item.active .step-name { color: var(--purple); font-weight: 600; }
+
+    /* Coda minute — banner in cima al pannello destro */
+    .queue-banner { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+    .queue-banner-hdr { padding: 11px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; background: #faf5ff; }
+    .queue-banner-title { font-size: 12px; font-weight: 600; color: var(--purple); flex: 1; }
+    .queue-count-badge { font-size: 10px; font-weight: 700; background: var(--purple); color: white; padding: 1px 8px; border-radius: 20px; }
+    .queue-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--border); }
+    .queue-item:last-child { border-bottom: none; }
+    .queue-item-info { flex: 1; min-width: 0; }
+    .queue-item-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .queue-item-sub  { font-size: 10px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 6px; align-items: center; }
+    .queue-item-tpl  { font-family: 'DM Mono', monospace; font-size: 10px; background: var(--surface-2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; }
+    .q-spinner { width: 11px; height: 11px; border: 2px solid #ddd6fe; border-top-color: var(--purple); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+    .q-dot-pending { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); flex-shrink: 0; }
+
+    /* Preview */
+    .preview-row { padding: 16px 20px; }
+    .preview-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; font-family: 'DM Mono', monospace; font-size: 11px; line-height: 1.7; color: var(--text-secondary); max-height: 320px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+    .preview-box::-webkit-scrollbar { width: 4px; }
+    .preview-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .preview-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-sm { padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; background: var(--surface); color: var(--text-primary); transition: all 0.12s; display: flex; align-items: center; gap: 6px; text-decoration: none; }
+    .btn-sm:hover { border-color: var(--border-hover); background: var(--surface-2); }
+    .btn-sm.primary { background: var(--purple); color: white; border-color: var(--purple); }
+    .btn-sm.primary:hover { background: #6d28d9; }
+
+    /* Error */
+    .error-row { padding: 14px 20px; }
+    .error-box { background: var(--error-light); border: 1px solid #fecaca; border-radius: var(--radius); padding: 14px 16px; }
+    .error-title { font-size: 12px; font-weight: 600; color: var(--error); margin-bottom: 4px; }
+    .error-msg { font-family: 'DM Mono', monospace; font-size: 11px; color: #b91c1c; line-height: 1.5; }
+
+    /* Status badge */
+    .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; }
+    .status-badge .dot { width: 5px; height: 5px; }
+    .status-badge.pending   { background: var(--warning-light); color: var(--warning); }
+    .status-badge.pending .dot { background: var(--warning); }
+    .status-badge.working   { background: var(--purple-light); color: var(--purple); }
+    .status-badge.working .dot { background: var(--purple); animation: pulse-dot 1s ease-in-out infinite; }
+    .status-badge.completed { background: var(--success-light); color: var(--success); }
+    .status-badge.completed .dot { background: var(--success); }
+    .status-badge.failed    { background: var(--error-light); color: var(--error); }
+    .status-badge.failed .dot { background: var(--error); }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* History panel */
+    .hist-row { border-radius: var(--radius); border: 1px solid transparent; overflow: hidden; margin-bottom: 4px; transition: border-color 0.12s; }
+    .hist-row.open { border-color: var(--border); }
+    .hist-row-header { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; border-radius: var(--radius); transition: background 0.12s; }
+    .hist-row-header:hover, .hist-row.open .hist-row-header { background: var(--surface-2); }
+    .hist-row-name { font-size: 12px; font-weight: 500; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hist-chevron { color: var(--text-muted); transition: transform 0.2s; flex-shrink: 0; }
+    .hist-row.open .hist-chevron { transform: rotate(90deg); }
+    .hist-accordion { display: none; padding: 4px 12px 12px; }
+    .hist-row.open .hist-accordion { display: block; }
+
+    /* Divider */
+    .divider { height: 1px; background: var(--border); margin: 0; }
+
+    /* ── Riga minuta ── */
+    .minute-row { border-bottom: 1px solid var(--border); }
+    .minute-row:last-child { border-bottom: none; }
+    .minute-row-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; transition: background 0.1s; }
+    .minute-row-header:hover { background: var(--surface-2); }
+    .minute-row-header.selected { background: var(--purple-light); }
+    .minute-row-icon { width: 32px; height: 32px; border-radius: 9px; background: var(--purple-light); display: grid; place-items: center; flex-shrink: 0; }
+    .minute-row-info { flex: 1; min-width: 0; }
+    .minute-row-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+    .minute-row-triplet { font-size: 10px; color: var(--text-muted); margin-top: 3px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .triplet-chip { font-family: 'DM Mono', monospace; font-size: 10px; background: var(--surface-2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--text-secondary); }
+    .minute-row-actions { display: flex; gap: 5px; align-items: center; flex-shrink: 0; }
+    /* Progress inline per job attivi */
+    .minute-progress { padding: 0 16px 12px; }
+    .minute-progress-track { height: 3px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin-top: 4px; }
+    .minute-progress-fill { height: 100%; background: var(--purple); border-radius: 99px; transition: width 0.5s; }
+    .minute-progress-fill.indeterminate { width: 35%; animation: indeterminate 1.4s ease-in-out infinite; }
+    @keyframes indeterminate { 0%{transform:translateX(-100%)} 100%{transform:translateX(350%)} }
+    .minute-step-label { font-size: 10px; color: var(--text-muted); font-family: 'DM Mono', monospace; }
+    /* Error inline */
+    .minute-error { margin: 0 16px 12px; padding: 8px 12px; background: var(--error-light); border: 1px solid #fecaca; border-radius: var(--radius-sm); font-size: 11px; color: var(--error); font-family: 'DM Mono', monospace; }
+
+    /* ── MD Preview ── */
+    .md-preview { padding: 20px 24px; overflow-y: auto; max-height: 70vh; line-height: 1.7; color: var(--text-primary); font-size: 13.5px; }
+    .md-preview::-webkit-scrollbar { width: 4px; }
+    .md-preview::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .md-preview h1 { font-size: 18px; font-weight: 700; margin: 0 0 16px; border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+    .md-preview h2 { font-size: 14px; font-weight: 700; margin: 20px 0 8px; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.04em; }
+    .md-preview h3 { font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+    .md-preview p { margin: 0 0 10px; }
+    .md-preview ul, .md-preview ol { margin: 0 0 10px 18px; }
+    .md-preview li { margin-bottom: 3px; }
+    .md-preview strong { font-weight: 600; }
+    .md-preview em { font-style: italic; color: var(--text-secondary); }
+    .md-preview hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+    .md-preview table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 12px; }
+    .md-preview th { background: var(--surface-2); font-weight: 600; padding: 6px 10px; text-align: left; border: 1px solid var(--border); }
+    .md-preview td { padding: 5px 10px; border: 1px solid var(--border); vertical-align: top; }
+    .md-preview code { font-family: 'DM Mono', monospace; font-size: 11px; background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
+    .md-preview blockquote { border-left: 3px solid var(--purple); margin: 8px 0; padding: 4px 12px; color: var(--text-secondary); font-style: italic; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; padding: 16px; }
+    }
   </style>
 </head>
 <body>
 <div class="app-shell">
 
   <header>
-    <a class="logo" href="index.html">
+    <a href="index.html" class="logo">
       <div class="logo-icon">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
@@ -34,419 +316,937 @@
       </div>
       Minute
     </a>
-    <span class="header-badge">Minuta</span>
-    <div class="header-stack" id="header-stack"></div>
+    <nav class="header-nav">
+      <a href="index.html" class="nav-link" id="nav-home">Trascrizioni</a>
+      <a href="speakers.html" class="nav-link" id="nav-speakers">Speaker</a>
+      <a href="minutes.html" class="nav-link active">Minuta</a>
+    </nav>
+    <div class="header-stack">
+      <div class="stack-pill"><span class="dot" id="ollama-dot"></span>ollama</div>
+      <div class="stack-pill"><span class="dot" id="minutes-dot"></span>minutes api</div>
+    </div>
   </header>
 
-  <div class="page-header">
-    <a class="page-back" href="index.html">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      Torna all'indice
-    </a>
-    <div class="page-header-inner">
-      <div class="page-title-wrap">
-        <div class="page-title">Genera Minuta</div>
-        <div class="page-subtitle" id="page-subtitle">Seleziona template, modello AI e genera</div>
-        <div class="page-job-pill" id="job-pill" style="display:none">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-          <span id="job-pill-text">—</span>
-        </div>
+  <main>
+
+    <!-- ── LEFT: Configurazione ── -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <span class="panel-title">Genera Minuta</span>
+        <span class="panel-subtitle">Configura · Avvia · Scarica</span>
       </div>
-      <div style="display:flex;gap:10px;align-items:flex-start;padding-top:4px">
-        <a class="btn-secondary" id="btn-goto-speakers" href="#" onclick="gotoSpeakers()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-          Speaker
-        </a>
+      <div class="panel-body">
+
+        <!-- 1. Trascrizione -->
+        <div id="job-selector-section">
+          <!-- Modalità "input fisso": job_id passato via URL -->
+          <div id="job-fixed" style="display:none">
+            <label>Trascrizione</label>
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 13px;background:var(--accent-light);border:1px solid #bfdbfe;border-radius:var(--radius)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;color:var(--accent)" id="fixed-job-name">—</div>
+                <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);margin-top:2px" id="fixed-job-meta">—</div>
+              </div>
+              <a href="index.html" style="font-size:11px;color:var(--text-muted);text-decoration:none;flex-shrink:0" title="Cambia trascrizione">Cambia</a>
+            </div>
+          </div>
+          <!-- Modalità "lista libera" -->
+          <div id="job-list-section">
+            <label>Trascrizione <span class="req"></span></label>
+            <div class="job-list" id="job-list">
+              <div class="jobs-loading">Caricamento trascrizioni…</div>
+            </div>
+          </div>
+          <input type="hidden" id="selected-job-id" />
+          <input type="hidden" id="selected-job-lang" value="it" />
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 2. Template -->
+        <div>
+          <label>Template <span class="req"></span></label>
+          <div class="template-grid" id="template-grid"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 3. Livello contesto -->
+        <div>
+          <label>Contesto RAG</label>
+          <div class="ctx-list" id="ctx-list"></div>
+          <div class="hint" id="ctx-hint" style="margin-top:8px"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 4. Modello -->
+        <div>
+          <label>Modello LLM <span class="req"></span></label>
+          <div id="model-list-container">
+            <div class="jobs-loading">Caricamento modelli…</div>
+          </div>
+          <input type="hidden" id="selected-model" />
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Submit -->
+        <button class="btn-submit" id="submit-btn" type="button" disabled>
+          <div class="spinner"></div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>Genera minuta</span>
+        </button>
+
       </div>
     </div>
-  </div>
 
-  <main class="page-main">
+    <!-- ── RIGHT: Minute della riunione ── -->
+    <div class="right-panel">
 
-    <div id="loading-state" style="display:flex;align-items:center;justify-content:center;padding:60px;gap:12px">
-      <div class="gen-spinner"></div>
-      <span style="font-size:13px;color:var(--text-muted)">Caricamento…</span>
-    </div>
-
-    <div id="error-state" style="display:none">
-      <div class="error-box"><div class="error-title">Errore</div><div class="error-msg" id="error-msg"></div></div>
-    </div>
-
-    <div id="content" style="display:none">
-
-      <!-- Speaker warning -->
-      <div class="speakers-warning" id="speakers-warning" style="display:none">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        <div class="speakers-warning-text">
-          Gli speaker non sono stati ancora associati a nomi reali. La minuta userà i label generici (SPEAKER_00…).
-          <a href="#" onclick="gotoSpeakers()" style="color:#92400e;font-weight:600">Associa speaker →</a>
+      <!-- Card lista minute -->
+      <div class="panel" id="minutes-card">
+        <div class="panel-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span class="panel-title">Minute di questa riunione</span>
+          <span class="panel-subtitle" id="minutes-job-label" style="margin-left:auto"></span>
         </div>
+
+        <!-- Empty state -->
+        <div class="status-empty" id="minutes-empty">
+          <div class="status-empty-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </div>
+          <div class="status-empty-title">Nessuna minuta ancora generata</div>
+          <div class="status-empty-sub">Configura template, modello e avvia la generazione</div>
+        </div>
+
+        <!-- Lista minute (una riga per template) -->
+        <div id="minutes-list" style="display:none"></div>
       </div>
 
-      <div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start">
-
-        <!-- LEFT: Config -->
-        <div style="display:flex;flex-direction:column;gap:16px">
-
-          <!-- Template -->
-          <div class="panel">
-            <div class="panel-header">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-              <span class="panel-title">Template</span>
-            </div>
-            <div class="panel-body" id="templates-container">
-              <!-- Populated by JS -->
-            </div>
-          </div>
-
-          <!-- Modello AI -->
-          <div class="panel">
-            <div class="panel-header">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-              <span class="panel-title">Modello AI</span>
-            </div>
-            <div class="panel-body" id="models-container">
-              <div style="text-align:center;padding:12px;color:var(--text-muted);font-size:12px">
-                <div class="gen-spinner" style="width:18px;height:18px;border-width:2px;margin:0 auto 8px"></div>
-                Caricamento modelli…
-              </div>
-            </div>
-          </div>
-
-          <!-- RAG -->
-          <div class="panel">
-            <div class="panel-header">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-              <span class="panel-title">Contesto RAG</span>
-              <span id="rag-count-badge" class="rag-count none" style="margin-left:auto">0 riunioni</span>
-            </div>
-            <div class="panel-body">
-              <div class="toggle-field" id="rag-toggle">
-                <div class="toggle-info">
-                  <div class="toggle-label">Usa riunioni precedenti</div>
-                  <div class="toggle-desc">Fornisce contesto storico al modello</div>
-                </div>
-                <div class="toggle-switch on" id="rag-switch"></div>
-              </div>
-              <div class="hint">Se attivo, il modello recupera estratti da riunioni precedenti dello stesso cliente per dare continuità alla minuta.</div>
-            </div>
-          </div>
-
-          <!-- Generate button -->
-          <button class="btn-accent" id="btn-generate" onclick="generateMinutes()" style="width:100%;padding:12px;font-size:14px" disabled>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Genera Minuta
-          </button>
-
-        </div>
-
-        <!-- RIGHT: Preview -->
-        <div class="panel" style="min-height:500px">
-          <div class="panel-header">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            <span class="panel-title">Anteprima Minuta</span>
-            <div class="version-bar" id="version-bar" style="margin-left:auto;display:none"></div>
-          </div>
-          <div style="padding:20px" id="preview-area">
-            <div class="empty-preview">
-              <div class="empty-preview-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              </div>
-              <div class="status-empty-title">Nessuna minuta generata</div>
-              <div class="status-empty-sub">Seleziona template e modello, poi premi Genera</div>
-            </div>
+      <!-- Card preview MD -->
+      <div class="panel" id="preview-card" style="display:none">
+        <div class="panel-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+          <span class="panel-title" id="preview-title">Anteprima</span>
+          <div style="display:flex;gap:6px;margin-left:auto">
+            <button class="btn-sm" id="preview-download-btn" type="button">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              .md
+            </button>
+            <button class="btn-sm" id="preview-copy-btn" type="button">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copia
+            </button>
           </div>
         </div>
-
+        <!-- Rendered markdown -->
+        <div class="md-preview" id="md-preview"></div>
       </div>
+
     </div>
   </main>
+
 </div>
-
 <script>
-  const MINUTES_BASE = "http://localhost:9500";
-  const params = new URLSearchParams(location.search);
-  const jobId  = params.get("job_id");
 
-  let selectedTemplate = "standard";
-  let selectedModel    = null;
-  let useRag           = true;
-  let pollingInterval  = null;
-  let versions         = [];   // lista storica versioni [{minutes_job_id, created_at, model, output_url}]
+  const MINUTES_API  = "http://localhost:9600";
+  const WHISPERX_API = "http://localhost:9200";
+  const SSE_BROKER   = "http://localhost:9400";
 
-  const TEMPLATES = [
-    {id: "standard", label: "Standard", desc: "Oggetto, discussioni, decisioni, azioni, prossimi passi"},
-  ];
-
-  if (!jobId) {
-    showError("Nessun job_id specificato. Torna all'indice.");
-  } else {
-    init();
+  function fixMinioUrl(url) {
+    if (!url) return url;
+    return url.replace(/^http:\/\/minio:9000/, 'http://localhost:9000');
   }
 
-  async function init() {
-    showLoading(true);
-    renderTemplates();
-    await loadModels();
-    await checkExistingMinuta();
-    await checkSpeakers();
-    showLoading(false);
-    document.getElementById('content').style.display = 'block';
+  const PIPELINE_STEPS = [
+    { key: "ENQUEUED",        label: "In coda" },
+    { key: "FETCHING",        label: "Caricamento trascrizione" },
+    { key: "RAG_RETRIEVAL",   label: "Retrieval RAG" },
+    { key: "BUILDING_PROMPT", label: "Costruzione prompt" },
+    { key: "GENERATING",      label: "Generazione LLM" },
+    { key: "UPLOADING",       label: "Salvataggio MinIO" },
+    { key: "COMPLETED",       label: "Completato" },
+  ];
 
-    document.getElementById('job-pill').style.display = 'inline-flex';
-    document.getElementById('job-pill-text').textContent = jobId.slice(0,12) + '…';
+  const CONTEXT_LEVELS = {
+    standalone:       { label: "Solo questa riunione",        desc: "Nessun contesto storico — minuta stand-alone" },
+    customer:         { label: "Contesto cliente",            desc: "Arricchisce con tutte le riunioni dello stesso cliente" },
+    customer_project: { label: "Contesto cliente + progetto", desc: "Usa riunioni precedenti dello stesso progetto" },
+    speakers:         { label: "Contesto per speaker",        desc: "Recupera interventi storici dei partecipanti" },
+  };
+
+  let TEMPLATES = {};
+
+  const $ = id => document.getElementById(id);
+  const fmt = iso => {
+    try { return new Date(iso).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+    catch { return iso||'—'; }
+  };
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let selectedJobId    = null;
+  let selectedTemplate = "standard";
+  let selectedContext  = "standalone";
+  let selectedModel    = null;
+  let minutesData      = [];     // tutti i job minutes per selectedJobId
+  let activePolls      = {};     // { minutes_id: intervalId } per job attivi
+  let selectedMinutesId = null;  // minuta selezionata (preview aperta)
+  let previewMdRaw     = "";     // testo markdown in preview
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  window.addEventListener('load', async () => {
+    const urlParams = new URLSearchParams(location.search);
+    const urlJobId  = urlParams.get('job_id');
+    if (urlJobId) {
+      document.getElementById('nav-speakers')?.setAttribute('href', `speakers.html?job_id=${urlJobId}`);
+    }
+
+    await checkHealth();
+    await loadTemplates();
+    renderContextLevels();
+    await loadModels();
+
+    if (urlJobId) {
+      await loadFixedJob(urlJobId);
+    } else {
+      await loadJobs();
+    }
+  });
+
+  // ── Health ─────────────────────────────────────────────────────────────────
+
+  async function checkHealth() {
+    try {
+      const r = await fetch(`${MINUTES_API}/health`, { signal: AbortSignal.timeout(3000) });
+      $('minutes-dot').className = r.ok ? 'dot live' : 'dot';
+      if (r.ok) {
+        const data = await r.json();
+        $('ollama-dot').className = data.ollama ? 'dot live' : 'dot warn';
+      }
+    } catch { $('minutes-dot').className = 'dot'; }
+  }
+
+  // ── Job fisso da URL ───────────────────────────────────────────────────────
+
+  async function loadFixedJob(jobId) {
+    document.getElementById('job-fixed').style.display = 'block';
+    document.getElementById('job-list-section').style.display = 'none';
+
+    try {
+      const r = await fetch(`${SSE_BROKER}/jobs`);
+      if (r.ok) {
+        const data = await r.json();
+        const job  = (data.jobs || []).find(j => j.job_id === jobId);
+        if (job) {
+          document.getElementById('fixed-job-name').textContent = `${job.customer||'?'} — ${job.project||'?'}`;
+          document.getElementById('fixed-job-meta').textContent = `${fmt(job.created_at)} · ${job.language||'?'}`;
+          selectJob(jobId, job.language||'it', job.customer||'', job.project||'');
+        } else {
+          document.getElementById('fixed-job-name').textContent = jobId.slice(0,8)+'…';
+          document.getElementById('fixed-job-meta').textContent = 'Trascrizione selezionata';
+          selectJob(jobId, 'it', '', '');
+        }
+      }
+    } catch { selectJob(jobId, 'it', '', ''); }
+  }
+
+  // ── Lista job (modalità libera) ────────────────────────────────────────────
+
+  async function loadJobs() {
+    document.getElementById('job-fixed').style.display = 'none';
+    document.getElementById('job-list-section').style.display = 'block';
+    try {
+      const r = await fetch(`${SSE_BROKER}/jobs`);
+      if (!r.ok) throw new Error('SSE broker non raggiungibile');
+      const data = await r.json();
+      const jobs = (data.jobs || []).filter(j => j.status === 'COMPLETED');
+      renderJobList(jobs);
+    } catch(e) {
+      $('job-list').innerHTML = `<div class="jobs-empty">Impossibile caricare le trascrizioni.<br><span style="font-size:10px;color:var(--text-muted)">${e.message}</span></div>`;
+    }
+  }
+
+  function renderJobList(jobs) {
+    if (!jobs.length) {
+      $('job-list').innerHTML = '<div class="jobs-empty">Nessuna trascrizione completata.<br>Avvia prima una trascrizione da <a href="index.html" style="color:var(--accent)">Trascrizioni</a>.</div>';
+      return;
+    }
+    $('job-list').innerHTML = jobs.map(job => `
+      <div class="job-card" data-job-id="${job.job_id}" onclick="selectJob('${job.job_id}','${job.language||'it'}','${(job.customer||'').replace(/'/g,"\\'")}','${(job.project||'').replace(/'/g,"\\'")}')">
+        <div class="job-card-info">
+          <div class="job-card-name">${job.customer||'?'} — ${job.project||'?'}</div>
+          <div class="job-card-meta">${fmt(job.created_at)} · ${job.language||'?'}</div>
+        </div>
+        <div class="dot ${job.job_id === selectedJobId ? 'live' : ''}"></div>
+      </div>
+    `).join('');
+  }
+
+  function selectJob(jobId, lang, customer, project) {
+    selectedJobId = jobId;
+    $('selected-job-id').value = jobId;
+    $('selected-job-lang').value = lang;
+    document.querySelectorAll('.job-card').forEach(c => {
+      c.classList.toggle('selected', c.dataset.jobId === jobId);
+      const dot = c.querySelector('.dot');
+      if (dot) dot.className = 'dot' + (c.dataset.jobId === jobId ? ' live' : '');
+    });
+    // Etichetta nel pannello destro
+    if ($('minutes-job-label')) $('minutes-job-label').textContent = `${customer||'?'} — ${project||'?'}`;
+    updateContextHint(customer, project);
+    updateSubmitState();
+    loadMinutesForJob(jobId);
+  }
+
+  // ── Templates ──────────────────────────────────────────────────────────────
+
+  const FALLBACK_TEMPLATES = {
+    standard: { name: 'Verbale Standard', tags: ['verbale', 'formale', 'decisioni', 'azioni'], description: 'Verbale formale con sezioni fisse: oggetto, punti discussi, decisioni, azioni, prossimi passi' },
+    client_meeting: { name: 'Meeting Cliente', tags: ['cliente', 'PM', 'rischi', 'tecnico'], description: 'Formato PM senior per riunioni enterprise: tipo meeting, decisioni, rischi, note tecniche' },
+  };
+
+  async function loadTemplates() {
+    try {
+      const r = await fetch(`${MINUTES_API}/minutes/templates`, { signal: AbortSignal.timeout(4000) });
+      if (r.ok) {
+        const data = await r.json();
+        const loaded = {};
+        for (const [key, t] of Object.entries(data.templates || {})) {
+          loaded[key] = { name: t.name, tags: Array.isArray(t.tags) ? t.tags : [], description: t.description || '' };
+        }
+        if (Object.keys(loaded).length > 0) {
+          TEMPLATES = loaded;
+        } else {
+          TEMPLATES = { ...FALLBACK_TEMPLATES };
+        }
+      } else {
+        TEMPLATES = { ...FALLBACK_TEMPLATES };
+      }
+    } catch(e) {
+      console.warn('[Minute] loadTemplates failed, using fallback:', e.message);
+      TEMPLATES = { ...FALLBACK_TEMPLATES };
+    }
+    if (!TEMPLATES[selectedTemplate]) selectedTemplate = Object.keys(TEMPLATES)[0];
+    renderTemplates();
   }
 
   function renderTemplates() {
-    const container = document.getElementById('templates-container');
-    container.innerHTML = TEMPLATES.map(t => `
-      <div class="model-card ${t.id===selectedTemplate?'selected':''}" onclick="selectTemplate('${t.id}')">
-        <div class="model-radio"></div>
-        <div>
-          <div class="model-name">${t.label}</div>
-          <div class="model-size">${t.desc}</div>
-        </div>
-      </div>`).join('');
+    $('template-grid').innerHTML = Object.entries(TEMPLATES).map(([key, t]) => {
+      const chips = (t.tags || []).map(tag => `<span class="tpl-tag">${tag}</span>`).join('');
+      const tooltip = t.description
+        ? `<div class="tpl-info-btn">i<div class="tpl-tooltip">${t.description}</div></div>`
+        : '';
+      return `
+        <div class="tpl-card ${key === selectedTemplate ? 'selected' : ''}" onclick="selectTemplate('${key}')">
+          <div class="tpl-card-header">
+            <div class="tpl-card-name">${t.name}</div>
+            ${tooltip}
+          </div>
+          ${chips ? `<div class="tpl-tags">${chips}</div>` : ''}
+        </div>`;
+    }).join('');
   }
 
-  function selectTemplate(id) {
-    selectedTemplate = id;
+  function selectTemplate(key) {
+    selectedTemplate = key;
     renderTemplates();
-    updateGenerateButton();
+    updateSubmitState();
   }
+
+  // ── Context levels ─────────────────────────────────────────────────────────
+
+  function renderContextLevels() {
+    $('ctx-list').innerHTML = Object.entries(CONTEXT_LEVELS).map(([key, c]) => `
+      <div class="ctx-item ${key === selectedContext ? 'selected' : ''}" onclick="selectContext('${key}')">
+        <div class="ctx-radio"></div>
+        <div>
+          <div class="ctx-label">${c.label}</div>
+          <div class="ctx-desc">${c.desc}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function selectContext(key) {
+    selectedContext = key;
+    renderContextLevels();
+    const jobId = $('selected-job-id').value;
+    if (jobId) updateContextHint('', '');
+  }
+
+  function updateContextHint(customer, project) {
+    const hints = {
+      standalone:       '',
+      customer:         customer ? `Cercherò riunioni precedenti di <strong>${customer}</strong>` : '',
+      customer_project: (customer && project) ? `Cercherò riunioni di <strong>${customer} / ${project}</strong>` : '',
+      speakers:         'Recupererò interventi storici dei partecipanti',
+    };
+    const el = $('ctx-hint');
+    if (el) el.innerHTML = hints[selectedContext] || '';
+  }
+
+  // ── Modelli ────────────────────────────────────────────────────────────────
 
   async function loadModels() {
-    const container = document.getElementById('models-container');
     try {
-      const resp = await fetch(`${MINUTES_BASE}/ollama/models`);
+      const resp = await fetch(`${MINUTES_API}/minutes/models`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      const models = data.models || [];
-      if (!models.length) {
-        container.innerHTML = `<div class="error-box"><div class="error-title">Nessun modello disponibile</div><div class="error-msg">Installa almeno un modello su Ollama:<br><code>docker exec n8n_stack_ollama ollama pull mistral:7b-instruct-q4_K_M</code></div></div>`;
-        return;
+      const available = data.available || [];
+      const suggested = data.suggested || [];
+
+      let html = '';
+
+      if (available.length) {
+        html += available.map(m => `
+          <div class="model-item" onclick="selectModel('${m.name}')">
+            <div class="model-dot installed"></div>
+            <div class="model-info">
+              <div class="model-name">${m.name}</div>
+              <div class="model-meta">${m.size_gb} GB</div>
+            </div>
+          </div>`).join('');
+        // Auto-seleziona primo disponibile
+        if (!selectedModel) selectModel(available[0].name);
       }
-      if (!selectedModel) selectedModel = models[0].name;
-      container.innerHTML = models.map(m => `
-        <div class="model-card ${m.name===selectedModel?'selected':''}" onclick="selectModel('${m.name}')">
-          <div class="model-radio"></div>
-          <div>
-            <div class="model-name">${m.name}</div>
-            <div class="model-size">${m.size_gb} GB</div>
-          </div>
-        </div>`).join('');
-      updateGenerateButton();
+
+      const notInstalled = suggested.filter(s => !s.installed);
+      if (notInstalled.length) {
+        html += `<div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:10px 0 4px">Da installare</div>`;
+        html += notInstalled.map(m => `
+          <div class="model-item disabled">
+            <div class="model-dot"></div>
+            <div class="model-info" style="flex:1">
+              <div class="model-name">${m.name}</div>
+              <div class="model-meta">${m.size_gb} GB · ${m.note}</div>
+            </div>
+            <button class="model-badge-pull" onclick="event.stopPropagation();pullModel('${m.name}',this)">
+              <svg class="pull-spinner" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span class="pull-icon">↓</span><span class="pull-label">Pull…</span>
+            </button>
+          </div>`).join('');
+      }
+
+      if (!html) html = '<div class="jobs-empty" style="font-size:12px">Nessun modello installato. Esegui <code>ollama pull &lt;nome&gt;</code></div>';
+      $('model-list-container').innerHTML = html;
     } catch(e) {
-      container.innerHTML = `<div class="error-box"><div class="error-title">Ollama non raggiungibile</div><div class="error-msg">${e.message}</div></div>`;
+      // Mostra i modelli suggeriti anche se Ollama non risponde, così si può fare pull
+      const suggested = [
+        { name: 'gemma3:12b',  size_gb: 8.1, note: 'Ottimo italiano, context 128k — consigliato' },
+        { name: 'mistral:7b',  size_gb: 4.1, note: 'Veloce, buon italiano' },
+        { name: 'qwen2.5:7b',  size_gb: 4.4, note: 'Ottimo per output strutturati' },
+        { name: 'llama3.2:3b', size_gb: 2.0, note: 'Leggero, per test' },
+      ];
+      let html = `<div style="padding:6px 0 8px;font-size:11px;color:var(--error)">Ollama non raggiungibile — verifica che il container sia attivo.</div>`;
+      html += `<div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:4px 0">Modelli suggeriti</div>`;
+      html += suggested.map(m => `
+        <div class="model-item disabled">
+          <div class="model-dot"></div>
+          <div class="model-info" style="flex:1">
+            <div class="model-name">${m.name}</div>
+            <div class="model-meta">${m.size_gb} GB · ${m.note}</div>
+          </div>
+          <button class="model-badge-pull" onclick="event.stopPropagation();pullModel('${m.name}',this)">
+            <span class="pull-icon">↓</span><span class="pull-label">Pull…</span>
+          </button>
+        </div>`).join('');
+      $('model-list-container').innerHTML = html;
     }
   }
 
   function selectModel(name) {
     selectedModel = name;
-    loadModels();
+    $('selected-model').value = name;
+    document.querySelectorAll('.model-item:not(.disabled)').forEach(el => {
+      el.classList.toggle('selected', el.querySelector('.model-name')?.textContent === name);
+    });
+    updateSubmitState();
   }
 
-  async function checkSpeakers() {
-    try {
-      const resp = await fetch(`${MINUTES_BASE}/jobs/${jobId}/speakers`);
-      const data = await resp.json();
-      document.getElementById('page-subtitle').textContent = `${data.customer||'?'} — ${data.project||'?'}`;
-      document.getElementById('header-stack').innerHTML = `
-        <div class="stack-pill" style="font-size:11px;font-weight:500">${data.customer||''}</div>
-        <div class="stack-pill" style="font-size:11px">${data.project||''}</div>`;
-      if (!data.speakers_mapped) {
-        document.getElementById('speakers-warning').style.display = 'flex';
-      }
-    } catch(e) { console.warn('checkSpeakers:', e); }
-  }
-
-  async function checkExistingMinuta() {
-    try {
-      const resp = await fetch(`${MINUTES_BASE}/minutes/by-job/${jobId}`);
-      const data = await resp.json();
-      if (data.status === 'COMPLETED' && data.output_url) {
-        versions = [{
-          minutes_job_id: data.minutes_job_id,
-          created_at: data.created_at,
-          model: data.model,
-          output_url: data.output_url,
-          rag_chunks_used: data.rag_chunks_used,
-        }];
-        await renderExistingMinuta(data.output_url, data.model, data.rag_chunks_used);
-        renderVersionBar();
-      }
-    } catch(e) { /* nessuna minuta ancora */ }
-  }
-
-  async function renderExistingMinuta(url, model, ragChunks) {
-    try {
-      const resp = await fetch(url);
-      const md = await resp.text();
-      renderMarkdown(md, model, ragChunks, url);
-    } catch(e) {
-      renderMarkdownError(`Impossibile caricare la minuta da MinIO: ${e.message}`);
+  async function pullModel(name, btn) {
+    btn.disabled = true;
+    btn.classList.add('pulling');
+    const fd = new FormData();
+    fd.append('model', name);
+    const resp = await fetch(`${MINUTES_API}/minutes/models/pull`, { method: 'POST', body: fd });
+    if (resp.ok) {
+      const check = setInterval(async () => {
+        const r = await fetch(`${MINUTES_API}/minutes/models`);
+        if (!r.ok) return;
+        const data = await r.json();
+        if ((data.available || []).some(m => m.name === name)) {
+          clearInterval(check);
+          await loadModels();
+        }
+      }, 5000);
     }
   }
 
-  function renderVersionBar() {
-    const bar = document.getElementById('version-bar');
-    if (!versions.length) { bar.style.display = 'none'; return; }
-    bar.style.display = 'flex';
-    bar.innerHTML = versions.map((v, i) => {
-      const d = new Date(v.created_at);
-      const label = `v${versions.length - i} · ${d.toLocaleDateString('it-IT')} ${d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`;
-      return `<span class="version-pill ${i===0?'active':''}" onclick="loadVersion(${i})">${label}</span>`;
+  // ── Submit state ──────────────────────────────────────────────────────────
+
+  function updateSubmitState() {
+    const canSubmit = !!(selectedJobId && selectedModel && selectedTemplate);
+    $('submit-btn').disabled = !canSubmit;
+    // Etichetta tasto: "Rigenera" se esiste già una minuta per questo template
+    const existing = minutesData.find(m => m.template === selectedTemplate && m.status === 'COMPLETED');
+    const active   = minutesData.find(m => m.template === selectedTemplate && (m.status === 'PENDING' || m.status === 'WORKING'));
+    const span = $('submit-btn').querySelector('span');
+    if (active) {
+      if (span) span.textContent = 'Già in generazione…';
+      $('submit-btn').disabled = true;
+    } else if (existing) {
+      if (span) span.textContent = 'Gestisci minuta';
+    } else {
+      if (span) span.textContent = 'Genera minuta';
+    }
+  }
+
+  // ── Submit / Genera / Rigenera ─────────────────────────────────────────────
+
+  $('submit-btn').addEventListener('click', () => generateMinute());
+
+  async function generateMinute() {
+    if (!selectedJobId || !selectedModel) return;
+
+    // Controlla se esiste già una minuta completata per questo template → DELETE prima
+    const existing = minutesData.find(m => m.template === selectedTemplate && m.status === 'COMPLETED');
+    if (existing) {
+      const ok = confirm(`Esiste già una minuta "${(TEMPLATES[selectedTemplate]||{}).name||selectedTemplate}". Rigenerare con le impostazioni correnti?`);
+      if (!ok) return;
+      try {
+        await fetch(`${MINUTES_API}/minutes/jobs/${existing.minutes_id}`, { method: 'DELETE' });
+      } catch(e) { console.warn('DELETE failed:', e); }
+    }
+
+    setLoading(true);
+    const participants = await fetchParticipants(selectedJobId);
+    const fd = new FormData();
+    fd.append('job_id',        selectedJobId);
+    fd.append('template',      selectedTemplate);
+    fd.append('context_level', selectedContext);
+    fd.append('model',         selectedModel);
+    fd.append('participants',  participants);
+
+    try {
+      const resp = await fetch(`${MINUTES_API}/minutes/jobs`, { method: 'POST', body: fd });
+      if (resp.status === 409) {
+        // Guard server: già in lavorazione
+        alert("C'è già una generazione in corso per questo template.");
+        setLoading(false);
+        return;
+      }
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      // Aggiorna lista locale e avvia polling
+      await loadMinutesForJob(selectedJobId);
+      startPolling(data.minutes_id);
+    } catch(err) {
+      alert(`Errore: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function setLoading(on) {
+    $('submit-btn').classList.toggle('loading', on);
+  }
+
+  async function fetchParticipants(jobId) {
+    try {
+      const r = await fetch(`${WHISPERX_API}/jobs/${jobId}/speakers`);
+      if (!r.ok) return '[]';
+      const data = await r.json();
+      return JSON.stringify((data.speakers || []).map(s => ({
+        speaker: s.speaker_id, name: s.name || s.speaker_id, role: s.company || ''
+      })));
+    } catch { return '[]'; }
+  }
+
+  // ── Carica minute per il job corrente ─────────────────────────────────────
+  // Ogni job ha N minute (una per template). Questa è la fonte di verità del pannello destro.
+
+  async function loadMinutesForJob(jobId) {
+    if (!jobId) return;
+    try {
+      const r = await fetch(`${MINUTES_API}/minutes/jobs?job_id=${jobId}&limit=20`);
+      if (!r.ok) return;
+      const data = await r.json();
+      minutesData = data.jobs || [];
+    } catch { minutesData = []; }
+    renderMinutesList();
+    updateSubmitState();
+    // Avvia polling per job attivi non ancora seguiti
+    for (const m of minutesData) {
+      if ((m.status === 'PENDING' || m.status === 'WORKING') && !activePolls[m.minutes_id]) {
+        startPolling(m.minutes_id);
+      }
+    }
+  }
+
+  // ── Render lista minute ───────────────────────────────────────────────────
+
+  function renderMinutesList() {
+    const el  = $('minutes-list');
+    const emp = $('minutes-empty');
+    if (!minutesData.length) {
+      el.style.display  = 'none';
+      emp.style.display = 'flex';
+      return;
+    }
+    emp.style.display = 'none';
+    el.style.display  = 'block';
+
+    el.innerHTML = minutesData.map(m => {
+      const tpl     = TEMPLATES[m.template] || { name: m.template || '—' };
+      const ctxLbl  = (CONTEXT_LEVELS[m.context_level] || { label: m.context_level || '—' }).label;
+      const isActive = m.status === 'PENDING' || m.status === 'WORKING';
+      const isSelected = m.minutes_id === selectedMinutesId;
+      const isCompleted = m.status === 'COMPLETED';
+      const isFailed    = m.status === 'FAILED';
+
+      // Tripletta: template · modello · contesto
+      const triplet = `
+        <span class="triplet-chip">${tpl.name}</span>
+        <span class="triplet-chip">${m.model || '—'}</span>
+        <span class="triplet-chip">${ctxLbl}</span>
+        <span style="margin-left:2px">${badgeHtml(m.status)}</span>`;
+
+      // Azioni
+      let actions = '';
+      if (isCompleted) {
+        actions = `
+          <button class="btn-sm" title="Anteprima" onclick="event.stopPropagation();openPreview('${m.minutes_id}')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+          <button class="btn-sm" title="Scarica .md" onclick="event.stopPropagation();downloadMinute('${m.minutes_id}')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>`;
+      }
+      if (isFailed) {
+        actions = `
+          <button class="btn-sm" title="Riprova" onclick="event.stopPropagation();retryMinute('${m.minutes_id}')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>`;
+      }
+
+      // Barra progresso + pipeline steps per job attivi
+      let progressHtml = '';
+      if (isActive) {
+        const pct  = calcPercent(m.step, m.status);
+        const fill = pct !== null
+          ? `<div class="minute-progress-fill" style="width:${pct}%"></div>`
+          : `<div class="minute-progress-fill indeterminate"></div>`;
+        const stepTxt = (m.step || 'ENQUEUED').replace(/_/g,' ').toLowerCase();
+        progressHtml = `<div class="minute-progress">
+          <span class="minute-step-label">${stepTxt}</span>
+          <div class="minute-progress-track">${fill}</div>
+          <div class="steps-list" style="margin-top:10px">${pipelineHtml(m.step, m.status)}</div>
+        </div>`;
+      }
+
+      // Errore inline
+      let errorHtml = '';
+      if (isFailed) {
+        errorHtml = `<div class="minute-error">${m.error || 'Errore sconosciuto'}</div>`;
+      }
+
+      const rowClick = isCompleted ? `onclick="selectMinuteRow('${m.minutes_id}')"` : '';
+
+      return `<div class="minute-row" id="mrow-${m.minutes_id}">
+        <div class="minute-row-header ${isSelected ? 'selected' : ''}" ${rowClick} style="${isCompleted ? 'cursor:pointer' : ''}">
+          <div class="minute-row-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </div>
+          <div class="minute-row-info">
+            <div class="minute-row-name">${tpl.name}</div>
+            <div class="minute-row-triplet">${triplet}</div>
+          </div>
+          <div class="minute-row-actions">${actions}</div>
+        </div>
+        ${progressHtml}
+        ${errorHtml}
+      </div>`;
     }).join('');
   }
 
-  async function loadVersion(idx) {
-    const v = versions[idx];
-    if (!v) return;
-    document.querySelectorAll('.version-pill').forEach((el,i) => el.classList.toggle('active', i===idx));
-    await renderExistingMinuta(v.output_url, v.model, v.rag_chunks_used);
-  }
+  // ── Selezione riga minuta → aggiorna pannello sx + apre preview ───────────
 
-  function renderMarkdown(md, model, ragChunks, downloadUrl) {
-    const preview = document.getElementById('preview-area');
-    const lines = md.split('\n');
-    let html = '';
-    let inTable = false;
+  function selectMinuteRow(minutesId) {
+    const m = minutesData.find(x => x.minutes_id === minutesId);
+    if (!m) return;
 
-    for (const raw of lines) {
-      const line = raw;
-      if (line.startsWith('# '))       { html += `<h1>${esc(line.slice(2))}</h1>`; continue; }
-      if (line.startsWith('## '))      { if(inTable){html+='</table>';inTable=false;} html += `<h2>${esc(line.slice(3))}</h2>`; continue; }
-      if (line.startsWith('### '))     { html += `<h3 style="font-size:12px;font-weight:600;color:var(--text-primary);margin:10px 0 4px">${esc(line.slice(4))}</h3>`; continue; }
-      if (line.startsWith('---') || line.startsWith('───')) { html += '<hr>'; continue; }
-      if (line.startsWith('| ')) {
-        if (!inTable) { html += '<table>'; inTable = true; }
-        const cells = line.split('|').filter((_,i,a)=>i>0&&i<a.length-1);
-        const isHeader = !html.includes('<tr>') || lines[lines.indexOf(raw)+1]?.startsWith('|---');
-        const tag = (isHeader && !html.includes('<td>')) ? 'th' : 'td';
-        html += `<tr>${cells.map(c=>`<${tag}>${inlineFormat(c.trim())}</${tag}>`).join('')}</tr>`;
-        continue;
-      }
-      if (line.startsWith('|---')) continue;
-      if (inTable) { html += '</table>'; inTable = false; }
-      if (line.startsWith('- ') || line.startsWith('* ')) { html += `<ul><li>${inlineFormat(line.slice(2))}</li></ul>`; continue; }
-      if (/^\d+\. /.test(line))  { html += `<ol><li>${inlineFormat(line.replace(/^\d+\. /,''))}</li></ol>`; continue; }
-      if (line.trim() === '')    { html += '<p style="margin:4px 0"></p>'; continue; }
-      html += `<p>${inlineFormat(line)}</p>`;
+    selectedMinutesId = minutesId;
+
+    // Sincronizza pannello sinistro con le impostazioni della minuta selezionata
+    if (TEMPLATES[m.template]) {
+      selectedTemplate = m.template;
+      renderTemplates();
     }
-    if (inTable) html += '</table>';
+    if (CONTEXT_LEVELS[m.context_level]) {
+      selectedContext = m.context_level;
+      renderContextLevels();
+    }
+    if (m.model) {
+      selectModel(m.model);
+    }
 
-    const ragBadge = ragChunks > 0
-      ? `<span class="rag-count">${ragChunks} chunk RAG</span>`
-      : `<span class="rag-count none">Senza RAG</span>`;
-
-    preview.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:500;color:var(--text-muted)">Modello:</div>
-        <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-secondary)">${esc(model||'')}</span>
-        ${ragBadge}
-        <a href="${downloadUrl}" target="_blank" rel="noopener" class="btn-secondary" style="margin-left:auto;padding:5px 12px;font-size:11px">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Scarica MD
-        </a>
-      </div>
-      <div class="md-preview">${html}</div>`;
+    renderMinutesList(); // aggiorna highlight riga
+    updateSubmitState();
+    openPreview(minutesId);
   }
 
-  function renderMarkdownError(msg) {
-    document.getElementById('preview-area').innerHTML = `<div class="error-box"><div class="error-title">Errore anteprima</div><div class="error-msg">${msg}</div></div>`;
-  }
+  // ── Preview MD ────────────────────────────────────────────────────────────
 
-  function inlineFormat(s) {
-    return esc(s)
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/`(.+?)`/g, '<code>$1</code>');
-  }
-  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  async function openPreview(minutesId) {
+    const m = minutesData.find(x => x.minutes_id === minutesId);
+    if (!m || !m.output_url) return;
 
-  async function generateMinutes() {
-    if (!selectedModel || !selectedTemplate) return;
-    const btn = document.getElementById('btn-generate');
-    btn.disabled = true;
+    const url = fixMinioUrl(m.output_url);
+    const tpl = TEMPLATES[m.template] || { name: m.template };
+    if ($('preview-title')) $('preview-title').textContent = tpl.name;
 
-    document.getElementById('preview-area').innerHTML = `
-      <div class="gen-status">
-        <div class="gen-spinner"></div>
-        <div class="gen-status-text">Generazione in corso…</div>
-        <div class="gen-status-sub">Il modello sta elaborando la trascrizione. Può richiedere alcuni minuti.</div>
-      </div>`;
+    $('preview-card').style.display = 'block';
+    $('md-preview').innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:12px">Caricamento…</div>';
+    previewMdRaw = '';
 
     try {
-      const resp = await fetch(`${MINUTES_BASE}/minutes/generate`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          job_id: jobId,
-          template: selectedTemplate,
-          model: selectedModel,
-          use_rag: useRag,
-        }),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
-      const {minutes_job_id} = await resp.json();
-      pollMinutesJob(minutes_job_id);
+      const r = await fetch(url);
+      const text = await r.text();
+      previewMdRaw = text;
+      $('md-preview').innerHTML = renderMarkdown(text);
     } catch(e) {
-      renderMarkdownError(`Errore avvio generazione: ${e.message}`);
-      btn.disabled = false;
+      $('md-preview').innerHTML = `<div style="padding:20px;color:var(--error);font-size:12px">Impossibile caricare: ${e.message}</div>`;
     }
+
+    // Tasto download
+    $('preview-download-btn').onclick = () => downloadMinute(minutesId);
+    // Tasto copia
+    $('preview-copy-btn').onclick = async () => {
+      try { await navigator.clipboard.writeText(previewMdRaw); $('preview-copy-btn').querySelector('svg + *') } catch {}
+      const btn = $('preview-copy-btn');
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copiato';
+      setTimeout(() => { btn.innerHTML = orig; }, 1500);
+    };
   }
 
-  function pollMinutesJob(minutesJobId) {
-    if (pollingInterval) clearInterval(pollingInterval);
-    pollingInterval = setInterval(async () => {
-      try {
-        const resp = await fetch(`${MINUTES_BASE}/minutes/${minutesJobId}`);
-        const data = await resp.json();
+  // ── Markdown renderer (leggero, no dipendenze) ────────────────────────────
 
-        if (data.status === 'COMPLETED') {
-          clearInterval(pollingInterval);
-          document.getElementById('btn-generate').disabled = false;
-          versions.unshift({
-            minutes_job_id: data.minutes_job_id,
-            created_at: data.created_at || new Date().toISOString(),
-            model: data.model,
-            output_url: data.output_url,
-            rag_chunks_used: data.rag_chunks_used,
-          });
-          renderVersionBar();
-          await renderExistingMinuta(data.output_url, data.model, data.rag_chunks_used);
-        } else if (data.status === 'FAILED') {
-          clearInterval(pollingInterval);
-          renderMarkdownError(`Generazione fallita: ${data.error_message || 'Errore sconosciuto'}`);
-          document.getElementById('btn-generate').disabled = false;
+  function renderMarkdown(md) {
+    // Escape HTML
+    const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    // Tabelle GFM
+    function parseTable(block) {
+      const lines = block.trim().split('\n');
+      if (lines.length < 2) return null;
+      const sep = lines[1];
+      if (!/^\|[-| :]+\|?\s*$/.test(sep)) return null;
+      const cells = row => row.replace(/^\||\|$/g,'').split('|').map(c => c.trim());
+      const head = cells(lines[0]);
+      const body = lines.slice(2).map(cells);
+      const th = head.map(c => `<th>${inlineStyle(esc(c))}</th>`).join('');
+      const tr = body.map(r => '<tr>' + r.map(c => `<td>${inlineStyle(esc(c))}</td>`).join('') + '</tr>').join('');
+      return `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+    }
+
+    function inlineStyle(s) {
+      return s
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/`(.+?)`/g, '<code>$1</code>');
+    }
+
+    const lines = md.split('\n');
+    let html = '';
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+
+      // Heading
+      const hm = line.match(/^(#{1,4})\s+(.+)/);
+      if (hm) { html += `<h${hm[1].length}>${inlineStyle(esc(hm[2]))}</h${hm[1].length}>`; i++; continue; }
+
+      // HR
+      if (/^(-{3,}|_{3,}|\*{3,})\s*$/.test(line)) { html += '<hr>'; i++; continue; }
+
+      // Tabella
+      if (line.startsWith('|')) {
+        let tableBlock = '';
+        while (i < lines.length && lines[i].startsWith('|')) { tableBlock += lines[i] + '\n'; i++; }
+        const tbl = parseTable(tableBlock);
+        html += tbl || `<p>${inlineStyle(esc(tableBlock.trim()))}</p>`;
+        continue;
+      }
+
+      // Lista
+      if (/^[-*+]\s/.test(line)) {
+        html += '<ul>';
+        while (i < lines.length && /^[-*+]\s/.test(lines[i])) {
+          html += `<li>${inlineStyle(esc(lines[i].replace(/^[-*+]\s/,'')))}</li>`;
+          i++;
         }
-        // altrimenti PENDING/WORKING → continua a fare polling
-      } catch(e) { console.warn('polling error:', e); }
+        html += '</ul>';
+        continue;
+      }
+
+      // Lista numerata
+      if (/^\d+\.\s/.test(line)) {
+        html += '<ol>';
+        while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+          html += `<li>${inlineStyle(esc(lines[i].replace(/^\d+\.\s/,'')))}</li>`;
+          i++;
+        }
+        html += '</ol>';
+        continue;
+      }
+
+      // Blockquote
+      if (line.startsWith('> ')) { html += `<blockquote>${inlineStyle(esc(line.slice(2)))}</blockquote>`; i++; continue; }
+
+      // Riga vuota
+      if (!line.trim()) { i++; continue; }
+
+      // Paragrafo
+      html += `<p>${inlineStyle(esc(line))}</p>`;
+      i++;
+    }
+    return html;
+  }
+
+  // ── Download ───────────────────────────────────────────────────────────────
+
+  async function downloadMinute(minutesId) {
+    const m = minutesData.find(x => x.minutes_id === minutesId);
+    if (!m || !m.output_url) return;
+    const url = fixMinioUrl(m.output_url);
+    const filename = url.split('/').pop()?.split('?')[0] || 'minuta.md';
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = decodeURIComponent(filename);
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch(e) { alert('Download fallito: ' + e.message); }
+  }
+
+  // ── Retry ─────────────────────────────────────────────────────────────────
+
+  async function retryMinute(minutesId) {
+    try {
+      await fetch(`${MINUTES_API}/minutes/jobs/${minutesId}/retry`, { method: 'POST' });
+      startPolling(minutesId);
+    } catch(e) { alert('Retry fallito: ' + e.message); }
+  }
+
+  // ── Polling job attivi ────────────────────────────────────────────────────
+
+  function startPolling(minutesId) {
+    if (activePolls[minutesId]) return;
+    activePolls[minutesId] = setInterval(async () => {
+      try {
+        const r = await fetch(`${MINUTES_API}/minutes/jobs/${minutesId}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        // Aggiorna minutesData
+        const idx = minutesData.findIndex(m => m.minutes_id === minutesId);
+        if (idx >= 0) {
+          minutesData[idx] = { ...minutesData[idx], ...data };
+        } else {
+          minutesData.unshift(data);
+        }
+        renderMinutesList();
+        updateSubmitState();
+        // Se completato: ferma polling, aggiorna preview se è quella aperta
+        if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+          clearInterval(activePolls[minutesId]);
+          delete activePolls[minutesId];
+          if (data.status === 'COMPLETED' && minutesId === selectedMinutesId) {
+            openPreview(minutesId);
+          }
+        }
+      } catch {}
     }, 3000);
   }
 
-  function updateGenerateButton() {
-    const btn = document.getElementById('btn-generate');
-    btn.disabled = !selectedTemplate || !selectedModel;
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function pipelineHtml(step, status) {
+    const activeIdx = PIPELINE_STEPS.findIndex(s => (step||'').toUpperCase().startsWith(s.key));
+    return PIPELINE_STEPS.map((s, i) => {
+      let state = 'pending';
+      if (status === 'COMPLETED')  state = 'done';
+      else if (i < activeIdx)      state = 'done';
+      else if (i === activeIdx)    state = 'active';
+      const icon = state === 'done'
+        ? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
+        : state === 'active'
+          ? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2.5"><circle cx="12" cy="12" r="4" fill="var(--purple)"/></svg>`
+          : `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--border-hover)" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>`;
+      const ic = state === 'done' ? 'done-i' : state === 'active' ? 'active-i' : 'pending-i';
+      return `<div class="step-item ${state}"><div class="step-icon ${ic}">${icon}</div><span class="step-name">${s.label}</span></div>`;
+    }).join('');
   }
 
-  document.getElementById('rag-toggle').addEventListener('click', () => {
-    useRag = !useRag;
-    document.getElementById('rag-switch').classList.toggle('on', useRag);
-  });
+  // Percentuale fissa per step leggeri, null (→ indeterminate) per quelli pesanti.
+  // GENERATING e RAG_RETRIEVAL possono durare minuti: mostrare una barra ferma è fuorviante.
+  const STEP_PCT = {
+    ENQUEUED:        2,
+    FETCHING:       10,
+    RAG_RETRIEVAL:  null,   // indeterminate — durata variabile
+    BUILDING_PROMPT: 40,
+    GENERATING:     null,   // indeterminate — dipende dal modello e dalla lunghezza
+    UPLOADING:       92,
+    COMPLETED:      100,
+  };
 
-  function gotoSpeakers() {
-    location.href = `speakers.html?job_id=${jobId}`;
-    return false;
+  function calcPercent(step, status) {
+    if (status === 'COMPLETED') return 100;
+    if (status === 'FAILED')    return null;
+    // Step con percentuale pyannote-style (es. "DIARIZING_EMBEDDINGS_42pct")
+    const m = (step||'').match(/(\d+)pct/i); if (m) return parseInt(m[1]);
+    // Cerca nella mappa per step esatti
+    const key = Object.keys(STEP_PCT).find(k => (step||'').toUpperCase().startsWith(k));
+    if (key !== undefined) return STEP_PCT[key];
+    return null;
   }
 
-  function showLoading(on) {
-    document.getElementById('loading-state').style.display = on ? 'flex' : 'none';
+  function badgeHtml(status) {
+    const map = {
+      PENDING:   ['pending',   'In attesa'],
+      ENQUEUED:  ['pending',   'In coda'],
+      WORKING:   ['working',   'In generazione'],
+      COMPLETED: ['completed', 'Completato'],
+      FAILED:    ['failed',    'Fallito'],
+    };
+    const [cls, lbl] = map[status] || ['pending', status];
+    return `<span class="status-badge ${cls}"><span class="dot"></span>${lbl}</span>`;
   }
-  function showError(msg) {
-    document.getElementById('error-state').style.display = 'block';
-    document.getElementById('error-msg').textContent = msg;
-    document.getElementById('loading-state').style.display = 'none';
-  }
+
 </script>
 </body>
 </html>

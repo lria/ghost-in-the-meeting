@@ -189,7 +189,11 @@
       </div>
       Minute
     </a>
-    <span class="header-badge">Speaker</span>
+    <nav class="header-nav">
+      <a href="index.html" class="nav-link" id="nav-home">Trascrizioni</a>
+      <a href="speakers.html" class="nav-link active" id="nav-speakers">Speaker</a>
+      <a href="minutes.html" class="nav-link" id="nav-minutes">Minuta</a>
+    </nav>
     <div class="header-stack" id="header-stack"></div>
   </header>
 
@@ -310,6 +314,9 @@
   if (!jobId) {
     showError("Nessun job_id specificato nell'URL. Torna all'indice e riprova.");
   } else {
+    // Propaga job_id nei link nav
+    document.getElementById('nav-minutes')?.setAttribute('href', `minutes.html?job_id=${jobId}`);
+    // nav-home punta sempre a index
     loadSpeakers();
   }
 
