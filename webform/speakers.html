@@ -179,7 +179,7 @@
 <div class="app-shell">
 
   <header>
-    <a class="logo" href="index.html">
+    <a href="index.html" class="logo">
       <div class="logo-icon">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
@@ -189,12 +189,25 @@
       </div>
       Minute
     </a>
-    <nav class="header-nav">
-      <a href="index.html" class="nav-link" id="nav-home">Trascrizioni</a>
-      <a href="speakers.html" class="nav-link active" id="nav-speakers">Speaker</a>
-      <a href="minutes.html" class="nav-link" id="nav-minutes">Minuta</a>
+    <nav class="top-nav">
+      <a href="index.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Trascrizione</span>
+      </a>
+      <a href="history.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Storico</span>
+      </a>
+      <a href="settings.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </a>
     </nav>
-    <div class="header-stack" id="header-stack"></div>
+    <div class="header-stack">
+      <div class="stack-pill"><span class="dot" id="api-dot"></span>whisperx</div>
+      <div class="stack-pill"><span class="dot" id="sse-dot"></span>sse</div>
+      <div class="stack-pill"><span class="dot" id="minutes-dot"></span>minutes</div>
+    </div>
   </header>
 
   <div class="page-header">
@@ -275,10 +288,7 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             <span class="panel-title">Trascrizione Annotata</span>
             <span class="panel-subtitle">Aggiornata in tempo reale</span>
-            <span class="badge-soon" style="margin-left:auto;display:flex;align-items:center;gap:4px">
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
-              Audio coming soon
-            </span>
+            <span id="audio-badge" style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600"></span>
           </div>
           <div class="transcript-body" id="transcript-body">
             <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:12px">Trascrizione non disponibile</div>
@@ -304,20 +314,24 @@
 
   // ── Audio player state ────────────────────────────────────────────────────
   let audioEl        = null;   // HTMLAudioElement condiviso
-  let audioUrl       = "";     // URL MinIO del file originale
+  let audioUrl       = "";     // URL MinIO del file originale (vuoto se assente o non raggiungibile)
+  let audioVerified  = false;  // true solo se l'URL ha risposto OK (audio presente)
   let playingSpeaker = null;   // speaker_id in riproduzione
   let speakerSegs    = {};     // speaker_id → [{start,end,...}] tutti i segmenti
   let segQueue       = [];     // coda segmenti da riprodurre per lo speaker corrente
   let segQueueIdx    = 0;
   let highlightTimer = null;
 
+  function fixMinioUrl(url) {
+    if (!url) return url;
+    return url.replace(/^http:\/\/minio:9000/, 'http://localhost:9000');
+  }
+
   if (!jobId) {
     showError("Nessun job_id specificato nell'URL. Torna all'indice e riprova.");
   } else {
-    // Propaga job_id nei link nav
-    document.getElementById('nav-minutes')?.setAttribute('href', `minutes.html?job_id=${jobId}`);
-    // nav-home punta sempre a index
     loadSpeakers();
+    checkHealth();
   }
 
   async function loadSpeakers() {
@@ -346,13 +360,25 @@
   }
 
   async function loadAudioUrl() {
+    audioUrl = "";
+    audioVerified = false;
     try {
       const resp = await fetch(`${API_BASE}/jobs/${jobId}`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      audioUrl = data.audio_url || "";
+      const raw = data.audio_url || "";
+      if (!raw.trim()) return;
+      audioUrl = fixMinioUrl(raw);
+      const check = await fetch(audioUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+      if (!check.ok) {
+        console.warn('[speakers] audio URL non raggiungibile:', check.status);
+        audioUrl = "";
+        return;
+      }
+      audioVerified = true;
     } catch(e) {
-      console.warn('[speakers] audio_url load warning:', e.message);
+      console.warn('[speakers] audio_url load/verify warning:', e.message);
+      audioUrl = "";
     }
   }
 
@@ -362,11 +388,17 @@
     const pill = document.getElementById('job-pill');
     pill.style.display = 'inline-flex';
     document.getElementById('job-pill-text').textContent = jobId.slice(0,12) + '…';
-    document.getElementById('header-stack').innerHTML = `
-      <div class="stack-pill" style="font-size:11px;font-weight:500">${data.customer || ''}</div>
-      <div class="stack-pill" style="font-size:11px">${data.project || ''}</div>`;
     if (data.speakers_mapped) {
       document.getElementById('btn-goto-minutes').style.display = 'inline-flex';
+    }
+  }
+
+  async function checkHealth() {
+    const API_BASE = "http://localhost:9200";
+    const SSE_BASE = "http://localhost:9400";
+    const MINUTES_BASE = "http://localhost:9600";
+    for (const [id, url] of [['api-dot', `${API_BASE}/health`], ['sse-dot', `${SSE_BASE}/health`], ['minutes-dot', `${MINUTES_BASE}/health`]]) {
+      try { const r = await fetch(url, { signal: AbortSignal.timeout(3000) }); document.getElementById(id).className = r.ok ? 'dot live' : 'dot'; } catch (e) { const el = document.getElementById(id); if (el) el.className = 'dot'; }
     }
   }
 
@@ -377,6 +409,8 @@
 
     if (!data.speakers.length) {
       container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">Nessuno speaker rilevato in questa trascrizione.</div>`;
+      updateSaveButton();
+      updateAudioBadge();
       return;
     }
 
@@ -432,9 +466,9 @@
         </div>`;
       }
 
-      // Bottone play — visibile solo se audio disponibile e speaker ha segmenti
+      // Bottone play — sempre mostrato quando audio verificato e speaker ha segmenti (anche se già assegnato)
       const hasSegs = (speakerSegs[spk.speaker_id] || []).length > 0;
-      const playBtn = (audioUrl && hasSegs) ? `
+      const playBtn = (audioVerified && audioUrl && hasSegs) ? `
         <button class="spk-play-btn" id="play-btn-${spk.speaker_id}"
           onclick="togglePlay('${spk.speaker_id}')"
           title="Riproduci interventi di ${spk.speaker_id}"
@@ -478,6 +512,20 @@
     }).join('');
 
     updateSaveButton();
+    updateAudioBadge();
+  }
+
+  function updateAudioBadge() {
+    const el = document.getElementById('audio-badge');
+    if (!el) return;
+    if (audioVerified && audioUrl) {
+      el.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span style="color:var(--success)">Audio disponibile</span>`;
+      el.className = '';
+    } else {
+      el.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg><span style="color:var(--text-muted)">Audio non disponibile</span>`;
+      el.title = 'Il file audio potrebbe essere stato eliminato o non è raggiungibile.';
+      el.className = '';
+    }
   }
 
   async function loadTranscript() {

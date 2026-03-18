@@ -6,69 +6,10 @@
   <title>Minute — Genera Minuta</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:            #f8f9fb;
-      --surface:       #ffffff;
-      --surface-2:     #f3f4f6;
-      --border:        #e5e7eb;
-      --border-hover:  #d1d5db;
-      --text-primary:  #111827;
-      --text-secondary:#374151;
-      --text-muted:    #9ca3af;
-      --accent:        #2563eb;
-      --accent-light:  #eff6ff;
-      --success:       #16a34a;
-      --success-light: #dcfce7;
-      --warning:       #d97706;
-      --warning-light: #fef3c7;
-      --error:         #dc2626;
-      --error-light:   #fee2e2;
-      --purple:        #7c3aed;
-      --purple-light:  #f5f3ff;
-      --radius:        10px;
-      --radius-sm:     6px;
-      --radius-lg:     14px;
-      --shadow-sm:     0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
-    }
-
-    html, body { height: 100%; }
-    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text-primary); font-size: 14px; line-height: 1.5; }
-
-    /* ── Shell ── */
-    .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
-
-    /* ── Header ── */
-    header {
-      background: var(--surface); border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; padding: 0 28px; gap: 12px;
-      height: 56px; position: sticky; top: 0; z-index: 10; flex-shrink: 0;
-    }
-    .logo { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; letter-spacing: -0.02em; color: var(--text-primary); text-decoration: none; }
-    .logo-icon { width: 28px; height: 28px; background: var(--text-primary); border-radius: 8px; display: grid; place-items: center; }
-    .logo-icon svg { color: white; }
-    .header-badge { font-size: 11px; font-weight: 500; padding: 2px 8px; background: var(--purple-light); color: var(--purple); border-radius: 20px; }
-    .header-nav { display: flex; gap: 4px; margin-left: 16px; }
-    .nav-link { font-size: 13px; font-weight: 500; color: var(--text-muted); padding: 5px 10px; border-radius: var(--radius-sm); text-decoration: none; transition: all 0.12s; }
-    .nav-link:hover { color: var(--text-primary); background: var(--surface-2); }
-    .nav-link.active { color: var(--text-primary); background: var(--surface-2); }
-    .header-stack { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-    .stack-pill { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); padding: 3px 8px; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 5px; }
-    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-hover); flex-shrink: 0; }
-    .dot.live { background: var(--success); box-shadow: 0 0 0 2px var(--success-light); }
-    .dot.warn { background: var(--warning); }
-
     /* ── Main ── */
     main { display: grid; grid-template-columns: 440px 1fr; gap: 24px; padding: 28px; max-width: 1240px; width: 100%; margin: 0 auto; align-items: start; flex: 1; }
-
-    /* ── Panel ── */
-    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
-    .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
-    .panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-    .panel-subtitle { font-size: 11px; color: var(--text-muted); }
-    .panel-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 
     /* ── Form ── */
     label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; letter-spacing: 0.01em; }
@@ -316,14 +257,24 @@
       </div>
       Minute
     </a>
-    <nav class="header-nav">
-      <a href="index.html" class="nav-link" id="nav-home">Trascrizioni</a>
-      <a href="speakers.html" class="nav-link" id="nav-speakers">Speaker</a>
-      <a href="minutes.html" class="nav-link active">Minuta</a>
+    <nav class="top-nav">
+      <a href="index.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Trascrizione</span>
+      </a>
+      <a href="history.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Storico</span>
+      </a>
+      <a href="settings.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </a>
     </nav>
     <div class="header-stack">
-      <div class="stack-pill"><span class="dot" id="ollama-dot"></span>ollama</div>
-      <div class="stack-pill"><span class="dot" id="minutes-dot"></span>minutes api</div>
+      <div class="stack-pill"><span class="dot" id="api-dot"></span>whisperx</div>
+      <div class="stack-pill"><span class="dot" id="sse-dot"></span>sse</div>
+      <div class="stack-pill"><span class="dot" id="minutes-dot"></span>minutes</div>
     </div>
   </header>
 
@@ -505,6 +456,7 @@
   let selectedContext  = "standalone";
   let selectedModel    = null;
   let minutesData      = [];     // tutti i job minutes per selectedJobId
+  let jobAudioUrl      = "";     // URL audio originale del job (per stack)
   let activePolls      = {};     // { minutes_id: intervalId } per job attivi
   let selectedMinutesId = null;  // minuta selezionata (preview aperta)
   let previewMdRaw     = "";     // testo markdown in preview
@@ -533,14 +485,22 @@
   // ── Health ─────────────────────────────────────────────────────────────────
 
   async function checkHealth() {
-    try {
-      const r = await fetch(`${MINUTES_API}/health`, { signal: AbortSignal.timeout(3000) });
-      $('minutes-dot').className = r.ok ? 'dot live' : 'dot';
-      if (r.ok) {
-        const data = await r.json();
-        $('ollama-dot').className = data.ollama ? 'dot live' : 'dot warn';
+    const checks = [
+      ['api-dot',     `${WHISPERX_API}/health`],
+      ['sse-dot',     `${SSE_BROKER}/health`],
+      ['minutes-dot', `${MINUTES_API}/health`],
+    ];
+    for (const [id, url] of checks) {
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+        const el = $(id);
+        if (!el) continue;
+        el.className = r.ok ? 'dot live' : 'dot';
+      } catch {
+        const el = $(id);
+        if (el) el.className = 'dot';
       }
-    } catch { $('minutes-dot').className = 'dot'; }
+    }
   }
 
   // ── Job fisso da URL ───────────────────────────────────────────────────────
@@ -611,6 +571,10 @@
     // Etichetta nel pannello destro
     if ($('minutes-job-label')) $('minutes-job-label').textContent = `${customer||'?'} — ${project||'?'}`;
     updateContextHint(customer, project);
+    // Reset selezione minuta e preview quando cambio job
+    selectedMinutesId = null;
+    $('preview-card').style.display = 'none';
+    $('md-preview').innerHTML = '';
     updateSubmitState();
     loadMinutesForJob(jobId);
   }
@@ -887,15 +851,24 @@
 
   async function loadMinutesForJob(jobId) {
     if (!jobId) return;
+    jobAudioUrl = "";
     try {
-      const r = await fetch(`${MINUTES_API}/minutes/jobs?job_id=${jobId}&limit=20`);
-      if (!r.ok) return;
-      const data = await r.json();
-      minutesData = data.jobs || [];
+      const [minutesResp, jobResp] = await Promise.all([
+        fetch(`${MINUTES_API}/minutes/jobs?job_id=${jobId}&limit=20`),
+        fetch(`${WHISPERX_API}/jobs/${jobId}`),
+      ]);
+      if (minutesResp.ok) {
+        const data = await minutesResp.json();
+        minutesData = data.jobs || [];
+      } else minutesData = [];
+      if (jobResp.ok) {
+        const jobData = await jobResp.json();
+        const raw = jobData.audio_url || "";
+        if (raw.trim()) jobAudioUrl = fixMinioUrl(raw);
+      }
     } catch { minutesData = []; }
     renderMinutesList();
     updateSubmitState();
-    // Avvia polling per job attivi non ancora seguiti
     for (const m of minutesData) {
       if ((m.status === 'PENDING' || m.status === 'WORKING') && !activePolls[m.minutes_id]) {
         startPolling(m.minutes_id);
@@ -908,7 +881,7 @@
   function renderMinutesList() {
     const el  = $('minutes-list');
     const emp = $('minutes-empty');
-    if (!minutesData.length) {
+    if (!minutesData.length && !jobAudioUrl) {
       el.style.display  = 'none';
       emp.style.display = 'flex';
       return;
@@ -916,7 +889,29 @@
     emp.style.display = 'none';
     el.style.display  = 'block';
 
-    el.innerHTML = minutesData.map(m => {
+    let audioRowHtml = '';
+    if (jobAudioUrl) {
+      const esc = jobAudioUrl.replace(/"/g, '&quot;');
+      audioRowHtml = `<div class="minute-row" id="mrow-audio">
+        <div class="minute-row-header" style="cursor:default">
+          <div class="minute-row-icon" style="background:var(--surface-2);color:var(--text-muted)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          </div>
+          <div class="minute-row-info">
+            <div class="minute-row-name">Audio originale</div>
+            <div class="minute-row-triplet"><span class="triplet-chip">registrazione</span></div>
+          </div>
+          <div class="minute-row-actions">
+            <a class="btn-sm" href="${esc}" download="audio" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download
+            </a>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    el.innerHTML = audioRowHtml + minutesData.map(m => {
       const tpl     = TEMPLATES[m.template] || { name: m.template || '—' };
       const ctxLbl  = (CONTEXT_LEVELS[m.context_level] || { label: m.context_level || '—' }).label;
       const isActive = m.status === 'PENDING' || m.status === 'WORKING';
@@ -940,6 +935,9 @@
           </button>
           <button class="btn-sm" title="Scarica .md" onclick="event.stopPropagation();downloadMinute('${m.minutes_id}')">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          <button class="btn-sm" title="Elimina minuta" onclick="event.stopPropagation();deleteMinute('${m.minutes_id}')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
           </button>`;
       }
       if (isFailed) {
@@ -956,7 +954,7 @@
         const fill = pct !== null
           ? `<div class="minute-progress-fill" style="width:${pct}%"></div>`
           : `<div class="minute-progress-fill indeterminate"></div>`;
-        const stepTxt = (m.step || 'ENQUEUED').replace(/_/g,' ').toLowerCase();
+        const stepTxt = formatStepLabel(m.step, m.status);
         progressHtml = `<div class="minute-progress">
           <span class="minute-step-label">${stepTxt}</span>
           <div class="minute-progress-track">${fill}</div>
@@ -1020,6 +1018,7 @@
   // ── Preview MD ────────────────────────────────────────────────────────────
 
   async function openPreview(minutesId) {
+    selectedMinutesId = minutesId;
     const m = minutesData.find(x => x.minutes_id === minutesId);
     if (!m || !m.output_url) return;
 
@@ -1040,7 +1039,7 @@
       $('md-preview').innerHTML = `<div style="padding:20px;color:var(--error);font-size:12px">Impossibile caricare: ${e.message}</div>`;
     }
 
-    // Tasto download
+    // Tasto download per la minuta selezionata
     $('preview-download-btn').onclick = () => downloadMinute(minutesId);
     // Tasto copia
     $('preview-copy-btn').onclick = async () => {
@@ -1142,7 +1141,16 @@
     const m = minutesData.find(x => x.minutes_id === minutesId);
     if (!m || !m.output_url) return;
     const url = fixMinioUrl(m.output_url);
-    const filename = url.split('/').pop()?.split('?')[0] || 'minuta.md';
+    // Nome file più descrittivo per distinguere le versioni
+    const tpl     = TEMPLATES[m.template] || { name: m.template || 'minuta' };
+    const safe = (s) => (s || '').toString().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    const baseName = [
+      safe(m.customer),
+      safe(m.project),
+      safe(tpl.name),
+      (m.minutes_id || '').slice(0,8)
+    ].filter(Boolean).join('_') || 'minuta';
+    const filename = `${baseName}.md`;
     try {
       const resp = await fetch(url);
       const blob = await resp.blob();
@@ -1161,6 +1169,28 @@
       await fetch(`${MINUTES_API}/minutes/jobs/${minutesId}/retry`, { method: 'POST' });
       startPolling(minutesId);
     } catch(e) { alert('Retry fallito: ' + e.message); }
+  }
+
+  // ── Delete minuta ───────────────────────────────────────────────────────────
+
+  async function deleteMinute(minutesId) {
+    if (!confirm('Eliminare questa minuta?')) return;
+    try {
+      const resp = await fetch(`${MINUTES_API}/minutes/jobs/${minutesId}`, { method: 'DELETE' });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || data.error || `HTTP ${resp.status}`);
+      }
+      // Se sto guardando proprio questa minuta, chiudo il viewer
+      if (selectedMinutesId === minutesId) {
+        selectedMinutesId = null;
+        $('preview-card').style.display = 'none';
+        $('md-preview').innerHTML = '';
+      }
+      await loadMinutesForJob(selectedJobId);
+    } catch(e) {
+      alert('Eliminazione fallita: ' + e.message);
+    }
   }
 
   // ── Polling job attivi ────────────────────────────────────────────────────
@@ -1212,14 +1242,14 @@
     }).join('');
   }
 
-  // Percentuale fissa per step leggeri, null (→ indeterminate) per quelli pesanti.
-  // GENERATING e RAG_RETRIEVAL possono durare minuti: mostrare una barra ferma è fuorviante.
+  // Percentuale: fissi per step brevi; GENERATING usa token count (worker invia GENERATING_<N>tok, max 4096).
+  const GENERATING_MAX_TOK = 4096;  // allineato a num_predict del worker
   const STEP_PCT = {
     ENQUEUED:        2,
     FETCHING:       10,
-    RAG_RETRIEVAL:  null,   // indeterminate — durata variabile
+    RAG_RETRIEVAL:  null,
     BUILDING_PROMPT: 40,
-    GENERATING:     null,   // indeterminate — dipende dal modello e dalla lunghezza
+    GENERATING:     null,   // calcolato da GENERATING_<N>tok
     UPLOADING:       92,
     COMPLETED:      100,
   };
@@ -1227,12 +1257,28 @@
   function calcPercent(step, status) {
     if (status === 'COMPLETED') return 100;
     if (status === 'FAILED')    return null;
-    // Step con percentuale pyannote-style (es. "DIARIZING_EMBEDDINGS_42pct")
+    const s = (step || '').toUpperCase();
+    // Fase LLM: step = "GENERATING_450tok" → % = min(100, 450/4096*100)
+    const genMatch = s.match(/^GENERATING_(\d+)TOK$/);
+    if (genMatch) {
+      const tok = parseInt(genMatch[1], 10);
+      return Math.min(100, Math.round((tok / GENERATING_MAX_TOK) * 100));
+    }
     const m = (step||'').match(/(\d+)pct/i); if (m) return parseInt(m[1]);
-    // Cerca nella mappa per step esatti
-    const key = Object.keys(STEP_PCT).find(k => (step||'').toUpperCase().startsWith(k));
+    const key = Object.keys(STEP_PCT).find(k => s.startsWith(k));
     if (key !== undefined) return STEP_PCT[key];
     return null;
+  }
+
+  function formatStepLabel(step, status) {
+    const s = (step || '').trim();
+    const genMatch = s.match(/^GENERATING_(\d+)tok$/i);
+    if (genMatch) {
+      const tok = genMatch[1];
+      const pct = calcPercent(step, status);
+      return `Generazione LLM · ${tok} tok${pct != null ? ` (${pct}%)` : ''}`;
+    }
+    return s.replace(/_/g, ' ').toLowerCase();
   }
 
   function badgeHtml(status) {

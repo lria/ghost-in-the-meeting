@@ -64,7 +64,7 @@ Produci ESCLUSIVAMENTE il markdown della minuta nel formato seguente, senza comm
 
 | Azione | Responsabile | Scadenza |
 |--------|-------------|---------|
-[Una riga per ogni action item emerso]
+[Una riga per ogni action item emerso, usa il nome completo del responsabile dell'azione seguito da " - " e dall'azienda]
 
 ## 5. Prossimi Passi
 [Descrivi cosa succede dopo questa riunione: prossimo meeting, milestone, deliverable attesi]

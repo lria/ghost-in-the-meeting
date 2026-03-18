@@ -3,158 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Minute — Audio Transcription</title>
+  <title>Minute — Nuova Trascrizione</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <style>
-    .header-nav { display: flex; gap: 4px; margin-left: 8px; }
-    .nav-link { font-size: 13px; font-weight: 500; color: var(--text-muted); padding: 5px 10px; border-radius: var(--radius-sm); text-decoration: none; transition: all 0.12s; }
-    .nav-link:hover { color: var(--text-primary); background: var(--surface-2); }
-    .nav-link.active { color: var(--text-primary); background: var(--surface-2); }
-
-    /* ── Action buttons (accordion) ── */
-    .btn-action {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 6px 12px; font-size: 12px; font-weight: 500;
-      color: var(--text-secondary); background: var(--surface-2);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      cursor: pointer; text-decoration: none; transition: all 0.12s;
-      font-family: 'DM Sans', sans-serif;
-    }
-    .btn-action:hover { background: var(--surface); border-color: var(--border-hover); color: var(--text-primary); }
-    .btn-action svg { flex-shrink: 0; }
-
-    /* ── Pause / Resume / Deleted ── */
-    .status-badge.paused  { background: #f5f3ff; color: #7c3aed; }
-    .status-badge.paused .dot  { background: #7c3aed; }
-    .status-badge.deleted { background: var(--surface-2); color: var(--text-muted); }
-    .status-badge.deleted .dot { background: var(--text-muted); }
-
-    .btn-stop {
-      display:inline-flex; align-items:center; gap:6px;
-      padding:6px 13px; background:var(--error-light); color:var(--error);
-      border:1px solid #fecaca; border-radius:var(--radius-sm);
-      font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600;
-      cursor:pointer; transition:all 0.15s; margin-top:12px;
-    }
-    .btn-stop:hover:not(:disabled) { background:#fecaca; }
-    .btn-stop:disabled { opacity:0.45; cursor:not-allowed; }
-
-    .btn-resume {
-      display:inline-flex; align-items:center; gap:6px;
-      padding:5px 12px; background:#f5f3ff; color:#7c3aed;
-      border:1px solid #ddd6fe; border-radius:var(--radius-sm);
-      font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600;
-      cursor:pointer; transition:all 0.15s;
-    }
-    .btn-resume:hover:not(:disabled) { background:#ede9fe; }
-    .btn-resume:disabled { opacity:0.45; cursor:not-allowed; }
-
-    .btn-delete {
-      display:inline-flex; align-items:center; gap:6px;
-      padding:5px 12px; background:var(--surface-2); color:var(--text-muted);
-      border:1px solid var(--border); border-radius:var(--radius-sm);
-      font-family:'DM Sans',sans-serif; font-size:12px; font-weight:500;
-      cursor:pointer; transition:all 0.15s;
-    }
-    .btn-delete:hover:not(:disabled) { background:var(--error-light); color:var(--error); border-color:#fecaca; }
-    .btn-delete:disabled { opacity:0.45; cursor:not-allowed; }
-
-    /* ── Delete overlay ── */
-    .del-overlay {
-      position:fixed; inset:0; z-index:200;
-      background:rgba(0,0,0,.35); backdrop-filter:blur(2px);
-      display:flex; align-items:center; justify-content:center;
-      animation: fadeIn .15s ease;
-    }
-    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-    .del-modal {
-      background:var(--surface); border:1px solid var(--border);
-      border-radius:var(--radius-lg); box-shadow:0 20px 60px rgba(0,0,0,.18);
-      width:100%; max-width:400px; margin:16px;
-      animation: slideUp .18s ease;
-    }
-    @keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
-    .del-modal-header {
-      padding:18px 20px 14px; border-bottom:1px solid var(--border);
-      display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
-    }
-    .del-modal-title { font-size:14px; font-weight:600; color:var(--text-primary); }
-    .del-modal-sub   { font-size:12px; color:var(--text-muted); margin-top:2px; }
-    .del-modal-close {
-      background:none; border:none; cursor:pointer; color:var(--text-muted);
-      padding:2px; border-radius:4px; flex-shrink:0; margin-top:-2px;
-    }
-    .del-modal-close:hover { color:var(--text-primary); background:var(--surface-2); }
-    .del-modal-body  { padding:14px 20px; display:flex; flex-direction:column; gap:6px; }
-    .del-opt {
-      display:flex; align-items:flex-start; gap:12px; padding:11px 13px;
-      border:1px solid var(--border); border-radius:var(--radius);
-      cursor:pointer; transition:all .12s; background:var(--surface); text-align:left;
-      width:100%; font-family:'DM Sans',sans-serif;
-    }
-    .del-opt:hover { border-color:#fca5a5; background:#fff5f5; }
-    .del-opt-icon  { width:30px; height:30px; border-radius:8px; background:var(--error-light); display:grid; place-items:center; flex-shrink:0; margin-top:1px; }
-    .del-opt-label { font-size:13px; font-weight:600; color:var(--text-primary); }
-    .del-opt-desc  { font-size:11px; color:var(--text-muted); margin-top:2px; line-height:1.4; }
-    .del-opt.danger .del-opt-icon { background:#fee2e2; }
-    .del-opt.danger .del-opt-label { color:var(--error); }
-    .del-opt.danger:hover { border-color:var(--error); background:#fff1f1; }
-    .del-modal-footer { padding:12px 20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; }
-    .del-cancel {
-      background:none; border:1px solid var(--border); border-radius:var(--radius-sm);
-      padding:6px 14px; font-size:12px; font-weight:500; color:var(--text-secondary);
-      cursor:pointer; font-family:'DM Sans',sans-serif; transition:all .12s;
-    }
-    .del-cancel:hover { background:var(--surface-2); }
-    .del-modal-status { padding:16px 20px; font-size:12px; color:var(--text-muted); text-align:center; }
-
-    .paused-warning {
-      display:flex; align-items:flex-start; gap:9px;
-      background:#f5f3ff; border:1px solid #ddd6fe;
-      border-radius:var(--radius); padding:11px 13px; margin-top:8px;
-    }
-    .paused-warning-text { font-size:12px; color:#5b21b6; line-height:1.5; }
-    .paused-warning-text strong { display:block; font-weight:600; margin-bottom:2px; }
-
-    .paused-bar { background: #7c3aed !important; }
-
-    /* ── Badge "minuta in generazione" nella card storico ── */
-    .minutes-active-badge {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 4px 10px; border-radius: var(--radius-sm);
-      background: #f5f3ff; border: 1px solid #ddd6fe;
-      font-size: 11px; font-weight: 500; color: #6d28d9;
-    }
-    .minutes-active-badge .ma-spinner {
-      width: 10px; height: 10px; border: 2px solid #ddd6fe;
-      border-top-color: #7c3aed; border-radius: 50%;
-      animation: spin 0.7s linear infinite; flex-shrink: 0;
-    }
-    .minutes-active-badge .ma-dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--warning); flex-shrink: 0;
-    }
-
-    /* ── File stack ── */
-    .files-stack { display:flex; flex-direction:column; gap:4px; margin-bottom:4px; }
-    .file-row { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface); }
-    .file-row-icon { width:22px; height:22px; border-radius:5px; display:grid; place-items:center; flex-shrink:0; }
-    .file-row-icon.json { background:#fff7ed; color:#c2410c; }
-    .file-row-icon.txt  { background:#f0fdf4; color:#15803d; }
-    .file-row-icon.md   { background:#f5f3ff; color:#7c3aed; }
-    .file-row-name { font-size:12px; font-weight:500; flex:1; color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .file-row-actions { display:flex; gap:4px; flex-shrink:0; }
-    .file-btn { display:grid; place-items:center; width:26px; height:26px; border-radius:5px; border:1px solid var(--border); background:var(--surface); color:var(--text-muted); text-decoration:none; transition:all .12s; cursor:pointer; }
-    .file-btn:hover { border-color:var(--border-hover); color:var(--text-primary); background:var(--surface-2); }
-  </style>
 </head>
 <body>
 <div class="app-shell">
 
   <header>
-    <div class="logo">
+    <a href="index.html" class="logo">
       <div class="logo-icon">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
@@ -163,26 +21,34 @@
         </svg>
       </div>
       Minute
-    </div>
-    <nav class="header-nav">
-      <a href="index.html" class="nav-link active">Trascrizioni</a>
-      <a href="speakers.html" class="nav-link" id="nav-speakers">Speaker</a>
-      <a href="minutes.html" class="nav-link" id="nav-minutes">Minuta</a>
+    </a>
+    <nav class="top-nav">
+      <a href="index.html" class="nav-link active">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Trascrizione</span>
+      </a>
+      <a href="history.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Storico</span>
+      </a>
+      <a href="settings.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </a>
     </nav>
     <div class="header-stack">
       <div class="stack-pill"><span class="dot" id="api-dot"></span>whisperx</div>
-      <div class="stack-pill"><span class="dot" id="sse-dot"></span>sse broker</div>
+      <div class="stack-pill"><span class="dot" id="sse-dot"></span>sse</div>
       <div class="stack-pill"><span class="dot" id="minutes-dot"></span>minutes</div>
     </div>
   </header>
 
   <main>
-    <!-- LEFT: Form -->
+    <!-- LEFT: Upload form -->
     <div class="panel">
       <div class="panel-header">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
         <span class="panel-title">Nuovo Job</span>
         <span class="panel-subtitle">Upload · Configura · Invia</span>
@@ -194,22 +60,17 @@
             <input type="file" id="file-input" accept="audio/*,video/*" />
             <div class="file-drop-icon">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
             </div>
             <div class="file-drop-label"><span>Scegli file</span> o trascina qui</div>
             <div class="file-drop-sub">MP3, WAV, M4A, MP4, MOV</div>
           </div>
           <div class="file-selected" id="file-selected">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-            </svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
             <span class="file-selected-name" id="file-name"></span>
             <button class="file-remove" id="file-remove" type="button">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
         </div>
@@ -217,7 +78,7 @@
         <div class="field-row">
           <div class="field-group">
             <label>Cliente <span class="req"></span></label>
-            <input type="text" id="customer" placeholder="Es. Alpitour" />
+            <input type="text" id="customer" placeholder="Es. ACME" />
           </div>
           <div class="field-group">
             <label>Progetto <span class="req"></span></label>
@@ -227,7 +88,7 @@
 
         <div class="field-group">
           <label>Partecipanti</label>
-          <textarea id="participants" placeholder="Uno per riga — es: Daniela Demichelis - IT"></textarea>
+          <textarea id="participants" placeholder="Uno per riga — es: Mario Rossi - IT"></textarea>
           <div class="hint">Separati da newline o punto e virgola</div>
         </div>
 
@@ -266,7 +127,7 @@
           </div>
         </div>
 
-        <div style="height:1px;background:var(--border);margin:16px 0 0"></div>
+        <div style="height:1px;background:var(--border);margin:4px 0 0"></div>
 
         <button class="btn-submit" id="submit-btn" type="button">
           <div class="spinner"></div>
@@ -278,27 +139,22 @@
       </div>
     </div>
 
-    <!-- RIGHT: Status -->
+    <!-- RIGHT: Active job status only -->
     <div class="panel">
       <div class="panel-header">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-        </svg>
-        <span class="panel-title">Stato Trascrizioni</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="panel-title">Stato Trascrizione</span>
         <span class="stream-badge stream-idle" id="stream-status" style="margin-left:auto">In attesa</span>
       </div>
 
       <div class="status-empty" id="status-empty">
         <div class="status-empty-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
-          </svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
         </div>
         <div class="status-empty-title">Nessuna trascrizione in corso</div>
-        <div class="status-empty-sub">Invia un audio per iniziare</div>
+        <div class="status-empty-sub">Invia un audio per iniziare · <a href="history.html" style="color:var(--accent);text-decoration:none">Vedi storico →</a></div>
       </div>
 
-      <!-- Trascrizione Corrente -->
       <div id="current-job" style="display:none">
         <div class="current-section">
           <div class="section-header">
@@ -325,45 +181,37 @@
           <div class="section-label">Pipeline</div>
           <div class="steps-list" id="current-steps-list"></div>
         </div>
+        <div id="current-stop-btn"></div>
       </div>
 
-      <!-- Storico -->
-      <div id="history-section" style="display:none">
-        <div class="history-section">
-          <div class="history-header">
-            <span class="section-label">Storico Trascrizioni</span>
-          </div>
-          <div id="history-container"></div>
-        </div>
+      <!-- Link to history when jobs complete -->
+      <div id="done-hint" style="display:none;padding:14px 20px;border-top:1px solid var(--border)">
+        <a href="history.html" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent);text-decoration:none;font-weight:500">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Visualizza nello storico →
+        </a>
       </div>
     </div>
   </main>
 
 </div>
-
 <script>
-  const API_BASE    = "http://localhost:9200";
-  const N8N_INGEST  = "http://localhost:5678/webhook/minute/ingest";
-  const SSE_BASE    = "http://localhost:9400";
-  const MINUTES_API = "http://localhost:9600";
+  const API_BASE     = "http://localhost:9200";
+  const N8N_INGEST   = "http://localhost:5678/webhook/minute/ingest";
+  const SSE_BASE     = "http://localhost:9400";
+  const MINUTES_BASE = "http://localhost:9600";
 
-  let diarize = true, eventSource = null, jobsMap = {}, openHistId = null;
+  let diarize = true, eventSource = null, jobsMap = {};
 
   const PIPELINE = [
-    {key:"ENQUEUED",label:"In coda"},
-    {key:"REQUEUED",label:"Riaccodato"},
-    {key:"DOWNLOADING",label:"Download"},
-    {key:"TRANSCRIBING",label:"Trascrizione"},
-    {key:"DIARIZING",label:"Diarizzazione"},
-    {key:"FORMATTING",label:"Formattazione"},
-    {key:"UPLOADING",label:"Upload MinIO"},
+    {key:"ENQUEUED",label:"In coda"},{key:"REQUEUED",label:"Riaccodato"},
+    {key:"TRANSCRIBING",label:"Trascrizione"},{key:"DIARIZING",label:"Diarizzazione"},
+    {key:"FORMATTING",label:"Formattazione"},{key:"UPLOADING",label:"Upload MinIO"},
     {key:"COMPLETED",label:"Completato"},
   ];
   const TERMINAL = ["COMPLETED","FAILED","DELETED"];
-  const PAUSED_S = ["PAUSED"];
   const $ = id => document.getElementById(id);
   const fmt = iso => { try { return new Date(iso).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return iso||'—'; } };
-  const jobTitle = job => `${job.customer||'?'} — ${job.project||'?'} — del ${fmt(job.created_at)}`;
 
   window.addEventListener('load', async () => {
     await checkHealth();
@@ -372,9 +220,9 @@
   });
 
   async function checkHealth() {
-    try { const r = await fetch(`${API_BASE}/health`,{signal:AbortSignal.timeout(3000)}); $('api-dot').className=r.ok?'dot live':'dot'; } catch { $('api-dot').className='dot'; }
-    try { const r = await fetch(`${SSE_BASE}/health`,{signal:AbortSignal.timeout(3000)}); $('sse-dot').className=r.ok?'dot live':'dot'; } catch { $('sse-dot').className='dot'; }
-    try { const r = await fetch(`${MINUTES_API}/health`,{signal:AbortSignal.timeout(3000)}); $('minutes-dot').className=r.ok?'dot live':'dot'; } catch { $('minutes-dot').className='dot'; }
+    for (const [id, url] of [['api-dot',`${API_BASE}/health`],['sse-dot',`${SSE_BASE}/health`],['minutes-dot',`${MINUTES_BASE}/health`]]) {
+      try { const r = await fetch(url,{signal:AbortSignal.timeout(3000)}); $(id).className=r.ok?'dot live':'dot'; } catch { $(id).className='dot'; }
+    }
   }
 
   async function loadInitialJobs() {
@@ -382,40 +230,8 @@
       const r = await fetch(`${SSE_BASE}/jobs`); if(!r.ok) return;
       const data = await r.json();
       for (const job of data.jobs) jobsMap[job.job_id] = job;
-      // Arricchisci con minutes_url se disponibile
-      await enrichWithMinutes();
-      renderAll();
-    } catch(e) { console.warn('[Minute] SSE broker non raggiungibile:', e.message); }
-  }
-
-  async function enrichWithMinutes() {
-    try {
-      const r = await fetch(`${MINUTES_API}/minutes/jobs?limit=100`);
-      if (!r.ok) return;
-      const data = await r.json();
-      // Reset: cancella stato minuta attiva su tutti i job prima di riscrivere
-      for (const j of Object.values(jobsMap)) {
-        j.minutes_active = null;
-      }
-      for (const m of (data.jobs || [])) {
-        if (!m.job_id) continue;
-        if (m.status === 'COMPLETED' && m.output_url) {
-          const url = m.output_url.replace(/^http:\/\/minio:9000/, 'http://localhost:9000');
-          if (jobsMap[m.job_id]) {
-            jobsMap[m.job_id].minutes_url   = url;
-            jobsMap[m.job_id].minutes_label = url.split('/').pop() || 'minuta.md';
-          }
-        }
-        // Salva il job minutes attivo (PENDING o WORKING) associato a questa trascrizione
-        if ((m.status === 'PENDING' || m.status === 'WORKING') && jobsMap[m.job_id]) {
-          jobsMap[m.job_id].minutes_active = {
-            status:   m.status,
-            step:     m.step || '',
-            template: m.template || '',
-          };
-        }
-      }
-    } catch { /* silenzioso se minutes_api non disponibile */ }
+      renderActive();
+    } catch(e) {}
   }
 
   function connectStream() {
@@ -423,13 +239,10 @@
     eventSource = new EventSource(`${SSE_BASE}/events?all=1`);
     setStreamStatus('connecting');
     eventSource.addEventListener('open', () => { setStreamStatus('connected'); $('sse-dot').className='dot live'; });
-    eventSource.addEventListener('job_update', e => { const job=JSON.parse(e.data); jobsMap[job.job_id]=job; if(job.status==='COMPLETED') enrichWithMinutes().then(renderAll); else renderAll(); });
+    eventSource.addEventListener('job_update', e => { const job=JSON.parse(e.data); jobsMap[job.job_id]=job; renderActive(); });
     eventSource.addEventListener('stream_end', () => { setStreamStatus('idle'); setTimeout(connectStream,10000); });
     eventSource.addEventListener('error', () => { setStreamStatus('error'); $('sse-dot').className='dot'; eventSource.close(); setTimeout(connectStream,8000); });
   }
-
-  // Polling minuta: aggiorna badge "in generazione" anche senza eventi SSE di trascrizione
-  setInterval(() => enrichWithMinutes().then(renderAll), 8000);
 
   function setStreamStatus(state) {
     const map={connecting:['stream-connecting','Connessione…'],connected:['stream-live','Live'],idle:['stream-idle','In attesa'],error:['stream-error','Disconnesso']};
@@ -437,211 +250,71 @@
     const el=$('stream-status'); el.className='stream-badge '+cls; el.textContent=txt;
   }
 
-  function renderAll() {
-    const all     = Object.values(jobsMap).sort((a,b)=>(b.created_at??'').localeCompare(a.created_at??''));
-    const active  = all.filter(j=>!TERMINAL.includes(j.status) && !PAUSED_S.includes(j.status));
-    const paused  = all.filter(j=> PAUSED_S.includes(j.status));
-    const done    = all.filter(j=> TERMINAL.includes(j.status));
-    const current = active.find(j=>j.status==='WORKING') ?? active[0] ?? paused[0] ?? null;
-    const queuedCount = active.filter(j=>j!==current).length + (paused[0]&&current===paused[0] ? 0 : paused.length);
-    renderCurrent(current, queuedCount > 0);
-    renderHistory([...done, ...paused.filter(p=>p!==current)]);
-  }
+  function renderActive() {
+    const all = Object.values(jobsMap).sort((a,b)=>(b.created_at??'').localeCompare(a.created_at??''));
+    const active = all.filter(j=>!TERMINAL.includes(j.status));
+    const current = active.find(j=>j.status==='WORKING') ?? active[0] ?? null;
+    const hasDone = all.some(j=>TERMINAL.includes(j.status));
 
-  function renderCurrent(job, hasQueued) {
-    if (!job) { $('status-empty').style.display='flex'; $('current-job').style.display='none'; return; }
-    $('status-empty').style.display='none'; $('current-job').style.display='block';
-    $('badge-new').style.display=hasQueued?'inline-block':'none';
-    $('current-title').textContent=jobTitle(job);
-    $('current-badge').innerHTML=badgeHtml(job.status);
-    $('current-step').textContent=job.step||'—';
-    $('current-created').textContent=fmt(job.created_at);
-    $('current-updated').textContent=fmt(job.updated_at)||'—';
-    const pct=calcPercent(job.step,job.status);
-    const fill=$('current-progress-fill');
-    if(pct!==null){
-      fill.className='progress-fill' + (job.status==='PAUSED' ? ' paused-bar' : '');
-      fill.style.width=pct+'%';
-    } else if(job.status==='PAUSED') {
-      // Nessuna % disponibile ma siamo paused: barra ferma al punto corrente
-      fill.className='progress-fill paused-bar';
-      // lascia width invariata
-    } else {
-      fill.className='progress-fill indeterminate';fill.style.width='';
+    if (!current) {
+      $('status-empty').style.display='flex';
+      $('current-job').style.display='none';
+      $('done-hint').style.display = hasDone ? 'block' : 'none';
+      return;
     }
-    $('current-steps-list').innerHTML=pipelineHtml(job.step,job.status);
+    $('status-empty').style.display='none';
+    $('current-job').style.display='block';
+    $('done-hint').style.display = hasDone ? 'block' : 'none';
 
-    // Stop button — visibile solo se WORKING
-    let stopBtn = $('current-stop-btn');
-    if (!stopBtn) {
-      stopBtn = document.createElement('div');
-      stopBtn.id = 'current-stop-btn';
-      stopBtn.style.padding = '0 20px 16px';
-      $('current-job').appendChild(stopBtn);
-    }
-    if (job.status === 'WORKING') {
-      stopBtn.innerHTML = `<button class="btn-stop" id="stop-btn-inner" data-job-id="${job.job_id}">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/><circle cx="12" cy="12" r="10"/></svg>
-        Sospendi
-      </button>`;
-      stopBtn.querySelector('#stop-btn-inner').onclick = () => pauseJob(job.job_id);
-    } else if (job.status === 'PAUSED') {
-      const pausedStep = (job.step||'').replace(/^PAUSED_AT_/i,'').replace(/_/g,' ').toLowerCase();
-      stopBtn.innerHTML = `
-        <div class="paused-warning" style="margin-bottom:12px">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/></svg>
-          <div class="paused-warning-text"><strong>Trascrizione sospesa</strong>Sospesa durante: ${pausedStep}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <button class="btn-resume resume-btn" data-job-id="${job.job_id}">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Riprendi
-          </button>
-          <button class="btn-delete delete-btn" data-job-id="${job.job_id}">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-            Elimina
-          </button>
-          <span id="current-resume-err-${job.job_id}" style="display:none;font-size:11px;color:var(--error)"></span>
+    $('badge-new').style.display = active.filter(j=>j!==current).length > 0 ? 'inline-block' : 'none';
+    $('current-title').textContent = `${current.customer||'?'} — ${current.project||'?'}`;
+    $('current-badge').innerHTML = badgeHtml(current.status);
+    $('current-step').textContent = current.step||'—';
+    $('current-created').textContent = fmt(current.created_at);
+    $('current-updated').textContent = fmt(current.updated_at)||'—';
+
+    const pct = calcPercent(current.step, current.status);
+    const fill = $('current-progress-fill');
+    if (pct !== null) { fill.className='progress-fill'+(current.status==='PAUSED'?' paused-bar':''); fill.style.width=pct+'%'; }
+    else { fill.className='progress-fill indeterminate'; fill.style.width=''; }
+    $('current-steps-list').innerHTML = pipelineHtml(current.step, current.status);
+
+    let stopDiv = $('current-stop-btn');
+    stopDiv.style.padding='0 20px 16px';
+    if (current.status==='WORKING') {
+      stopDiv.innerHTML=`<button class="btn-stop" onclick="pauseJob('${current.job_id}')">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/><circle cx="12" cy="12" r="10"/></svg>Sospendi</button>`;
+    } else if (current.status==='PAUSED') {
+      const ps=(current.step||'').replace(/^PAUSED_AT_/i,'').replace(/_/g,' ').toLowerCase();
+      stopDiv.innerHTML=`<div class="paused-warning" style="margin-bottom:12px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/></svg>
+        <div class="paused-warning-text"><strong>Trascrizione sospesa</strong>Sospesa durante: ${ps}</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn-resume" onclick="resumeJob('${current.job_id}')"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Riprendi</button>
         </div>`;
-    } else {
-      stopBtn.innerHTML = '';
-    }
+    } else { stopDiv.innerHTML=''; }
   }
-
-  function renderHistory(jobs) {
-    const sec=$('history-section');
-    if(!jobs.length){sec.style.display='none';return;}
-    sec.style.display='block';
-    const trashIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
-    $('history-container').innerHTML=jobs.map(job=>{
-      const isOpen=openHistId===job.job_id;
-      const isFailed=job.status==='FAILED';
-      const isCompleted=job.status==='COMPLETED';
-      const isPaused=job.status==='PAUSED';
-      const isDeleted=job.status==='DELETED';
-      let body=`<div class="hist-meta">
-        <div class="hist-meta-row"><span class="hist-meta-label">Data</span><span class="hist-meta-value">${fmt(job.created_at)}</span></div>
-        ${job.updated_at?`<div class="hist-meta-row"><span class="hist-meta-label">Fine</span><span class="hist-meta-value">${fmt(job.updated_at)}</span></div>`:''}
-        <div class="hist-meta-row"><span class="hist-meta-label">Stato</span><span class="hist-meta-value">${badgeHtml(job.status)}</span></div>
-      </div>`;
-      if(isCompleted&&(job.output_json_url||job.output_txt_url||job.minutes_url)){
-        body+=`<div class="files-stack">${
-          [
-            job.output_json_url ? fileRow(job.output_json_url,'json','result.json') : '',
-            job.output_txt_url  ? fileRow(job.output_txt_url,'txt','result.txt') : '',
-            job.minutes_url     ? fileRow(job.minutes_url,'md', job.minutes_label || 'minuta.md') : '',
-          ].join('')
-        }</div>`;
-      }
-      if(isCompleted){
-        // Badge "minuta in generazione" se c'è un job minutes attivo per questo job
-        if (job.minutes_active) {
-          const ma = job.minutes_active;
-          const isWorking = ma.status === 'WORKING';
-          const stepText  = ma.step ? ma.step.replace(/_/g,' ').toLowerCase() : '';
-          const indicator = isWorking
-            ? `<span class="ma-spinner"></span>`
-            : `<span class="ma-dot"></span>`;
-          const label = isWorking
-            ? `Minuta in generazione${stepText ? ` — ${stepText}` : ''}…`
-            : `Minuta in coda…`;
-          body += `<div style="margin-bottom:8px">
-            <span class="minutes-active-badge">${indicator}${label}</span>
-          </div>`;
-        }
-        body+=`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <a class="btn-action" href="speakers.html?job_id=${job.job_id}">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Associa Speaker
-          </a>
-          <a class="btn-action" href="minutes.html?job_id=${job.job_id}" style="${job.minutes_url?'border-color:#ddd6fe;color:#7c3aed;background:#f5f3ff':''}">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            ${job.minutes_url ? 'Gestisci minuta' : 'Genera minuta'}
-          </a>
-          <button class="btn-delete delete-btn" data-job-id="${job.job_id}" style="margin-left:auto">${trashIcon} Elimina</button>
-        </div>`;
-      }
-      if(isFailed){
-        body+=`<div class="error-box" style="margin-top:8px"><div class="error-title">Job fallito</div><div class="error-msg">${job.error||'Errore sconosciuto'}</div></div>
-        <div style="margin-top:8px"><button class="btn-delete delete-btn" data-job-id="${job.job_id}">${trashIcon} Elimina</button></div>`;
-      }
-      if(isPaused){
-        const pausedStep=(job.step||'').replace(/^PAUSED_AT_/i,'').replace(/_/g,' ').toLowerCase();
-        body+=`<div class="paused-warning" style="margin-top:8px">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/></svg>
-          <div class="paused-warning-text"><strong>Sospesa durante: ${pausedStep}</strong>Il job riparte dall'inizio — la trascrizione parziale non viene salvata.</div>
-        </div>
-        <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
-          <button class="btn-resume resume-btn" data-job-id="${job.job_id}">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Riprendi trascrizione
-          </button>
-          <button class="btn-delete delete-btn" data-job-id="${job.job_id}">${trashIcon} Elimina</button>
-          <span id="resume-err-${job.job_id}" style="display:none;font-size:11px;color:var(--error)"></span>
-        </div>`;
-      }
-      if(isDeleted){
-        body+=`<div style="margin-top:8px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;color:var(--text-muted)">
-          I file di questo job sono stati eliminati. Rimangono solo i metadati.
-        </div>
-        <div style="margin-top:8px">
-          <button class="btn-delete delete-btn" data-job-id="${job.job_id}" style="color:var(--error);border-color:#fecaca;background:var(--error-light)">${trashIcon} Elimina definitivamente</button>
-        </div>`;
-      }
-      return `<div class="hist-row ${isOpen?'open':''}" data-job-id="${job.job_id}">
-        <div class="hist-row-header">
-          <div class="hist-row-info" style="cursor:pointer" onclick="toggleHist('${job.job_id}')">
-            <span class="hist-row-name">${jobTitle(job)}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-            ${badgeHtml(job.status)}
-            <svg class="hist-chevron" style="cursor:pointer" onclick="toggleHist('${job.job_id}')" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </div>
-        </div>
-        <div class="hist-accordion">${body}</div>
-      </div>`;
-    }).join('');
-  }
-
-    function toggleHist(id) { openHistId = openHistId === id ? null : id; renderAll(); }
 
   function pipelineHtml(currentStep, status) {
-    // Se PAUSED, ricava lo step reale rimuovendo il prefisso PAUSED_AT_
-    const effectiveStep = status === 'PAUSED'
-      ? (currentStep??'').replace(/^PAUSED_AT_/i, '')
-      : (currentStep??'');
-    const activeIdx = PIPELINE.findIndex(s => effectiveStep.toUpperCase().startsWith(s.key));
+    const effStep = status==='PAUSED' ? (currentStep||'').replace(/^PAUSED_AT_/i,'') : (currentStep||'');
+    const activeIdx = PIPELINE.findIndex(s=>effStep.toUpperCase().startsWith(s.key));
     return PIPELINE.map((s,i)=>{
-      let state = 'pending';
+      let state='pending';
       if(status==='COMPLETED') state='done';
-      else if(status==='PAUSED') {
-        // Pipeline congelata: tutto fino ad activeIdx è done, activeIdx è "paused" (mostrato come active ma senza animazione)
-        if(i < activeIdx)  state='done';
-        else if(i===activeIdx) state='active';
-      }
-      else if(i<activeIdx)  state='done';
+      else if(i<activeIdx) state='done';
       else if(i===activeIdx) state='active';
-      const pausedIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="#7c3aed"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>`;
       const icon = state==='done'
         ?`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
-        :state==='active' && status==='PAUSED'
-          ? pausedIcon
-          :state==='active'
-            ?`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5"><circle cx="12" cy="12" r="4" fill="var(--accent)"/></svg>`
-            :`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--border-hover)" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>`;
-      const ic = state==='done'?'done-i':state==='active'?'active-i':'pending-i';
-      const pausedStyle = (status==='PAUSED' && i===activeIdx) ? ' style="background:#f5f3ff"' : '';
-      return `<div class="step-item ${state}"><div class="step-icon ${ic}"${pausedStyle}>${icon}</div><span class="step-name">${s.label}</span></div>`;
+        :state==='active'
+          ?`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5"><circle cx="12" cy="12" r="4" fill="var(--accent)"/></svg>`
+          :`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--border-hover)" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>`;
+      const ic=state==='done'?'done-i':state==='active'?'active-i':'pending-i';
+      return `<div class="step-item ${state}"><div class="step-icon ${ic}">${icon}</div><span class="step-name">${s.label}</span></div>`;
     }).join('');
   }
 
   function badgeHtml(status) {
-    const map={
-      PENDING:['pending','In attesa'], ENQUEUED:['pending','In coda'],
-      WORKING:['working','In elaborazione'], COMPLETED:['completed','Completato'],
-      FAILED:['failed','Fallito'], PAUSED:['paused','In pausa'],
-      DELETED:['deleted','Eliminato'],
-    };
+    const map={PENDING:['pending','In attesa'],ENQUEUED:['pending','In coda'],WORKING:['working','In elaborazione'],COMPLETED:['completed','Completato'],FAILED:['failed','Fallito'],PAUSED:['paused','In pausa'],DELETED:['deleted','Eliminato']};
     const [cls,lbl]=map[status]??['pending',status];
     return `<span class="status-badge ${cls}"><span class="dot"></span>${lbl}</span>`;
   }
@@ -649,50 +322,13 @@
   function calcPercent(step, status) {
     if(status==='COMPLETED') return 100;
     if(status==='FAILED') return null;
-    if(status==='PAUSED') {
-      // mostra la % dello step in cui è stato sospeso
-      const m=(step??'').match(/(\d+)pct/i); if(m) return parseInt(m[1]);
-      return null;
-    }
-    const m=(step??'').match(/(\d+)pct/i); if(m) return parseInt(m[1]);
-    const idx=PIPELINE.findIndex(s=>(step??'').toUpperCase().startsWith(s.key));
+    const m=(step||'').match(/(\d+)pct/i); if(m) return parseInt(m[1]);
+    const idx=PIPELINE.findIndex(s=>(step||'').toUpperCase().startsWith(s.key));
     if(idx>=0) return Math.round(((idx+0.5)/PIPELINE.length)*100);
     return null;
   }
 
-  function resultLink(url, type) {
-    const isJson=type==='json';
-    const col=isJson?'#c2410c':'#15803d';
-    const label=isJson?'result.json':'result.txt';
-    const meta=isJson?'Trascrizione strutturata':'Testo semplice';
-    return `<a class="result-link" href="${url}" target="_blank" rel="noopener">
-      <div class="result-icon ${type}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-      <div><div class="result-name">${label}</div><div class="result-meta">${meta} · MinIO</div></div>
-      <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-    </a>`;
-  }
-
-  function fileRow(url, type, label) {
-    const icons = {
-      json: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
-      txt:  `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
-      md:   `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
-    };
-    const eyeIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-    const dlIcon  = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
-    // filename from URL for download attribute
-    const filename = url.split('/').pop() || label;
-    return `<div class="file-row">
-      <div class="file-row-icon ${type}">${icons[type]||''}</div>
-      <span class="file-row-name">${label}</span>
-      <div class="file-row-actions">
-        <a class="file-btn" href="${url}" target="_blank" rel="noopener" title="Apri">${eyeIcon}</a>
-        <a class="file-btn" href="${url}" download="${filename}" title="Scarica">${dlIcon}</a>
-      </div>
-    </div>`;
-  }
-
-  /* ── Form ── */
+  /* Form */
   const fileInput=$('file-input'),fileDrop=$('file-drop'),fileSelected=$('file-selected'),fileName=$('file-name'),fileRemove=$('file-remove');
   const diarizeToggle=$('diarize-toggle'),diarizeSwitch=$('diarize-switch'),submitBtn=$('submit-btn');
 
@@ -718,7 +354,7 @@
       if(!r.ok){const t=await r.text();throw new Error(`HTTP ${r.status}: ${t}`);}
       const data=await r.json();
       jobsMap[data.job_id]={job_id:data.job_id,status:data.status??'PENDING',step:'ENQUEUED',customer:data.customer??customer,project:data.project??project,created_at:new Date().toISOString()};
-      renderAll();connectStream();
+      renderActive();connectStream();
     }catch(err){alert(`Errore: ${err.message}`);}
     finally{setLoading(false);}
   });
@@ -726,178 +362,14 @@
   function setLoading(on){submitBtn.disabled=on;submitBtn.classList.toggle('loading',on);}
 
   async function pauseJob(jobId) {
-    const btn = document.getElementById('stop-btn-inner');
-    if (btn) { btn.disabled = true; btn.textContent = 'Interruzione…'; }
+    try { await fetch(`${API_BASE}/jobs/${jobId}/pause`,{method:'POST'}); connectStream(); } catch(e){alert(`Errore: ${e.message}`);}
+  }
+  async function resumeJob(jobId) {
     try {
-      const r = await fetch(`${API_BASE}/jobs/${jobId}/pause`, {method:'POST'});
-      const data = await r.json();
-      if (!r.ok) {
-        alert(`Impossibile fermare: ${data.detail || data.error}`);
-        if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> Interrompi'; }
-        return;
-      }
-      // Riconnette lo stream: il worker metterà PAUSED entro qualche secondo,
-      // il broker lo notificherà e renderAll aggiornerà l'UI
+      const r=await fetch(`${API_BASE}/jobs/${jobId}/resume`,{method:'POST'});
+      if(!r.ok){const d=await r.json();alert(d.detail||d.error||'Errore resume');return;}
       connectStream();
-    } catch(e) {
-      alert(`Errore: ${e.message}`);
-      if (btn) { btn.disabled = false; }
-    }
-  }
-
-  // Resume button — event delegation su history-container
-  document.addEventListener('click', async e => {
-    const btn = e.target.closest('.resume-btn');
-    if (!btn) return;
-    const jobId = btn.dataset.jobId;
-    const errEl = document.getElementById(`resume-err-${jobId}`) || document.getElementById(`current-resume-err-${jobId}`);
-    const origHtml = btn.innerHTML;
-    btn.disabled = true;
-    btn.textContent = 'Ripristino…';
-    if (errEl) errEl.style.display = 'none';
-    try {
-      const r = await fetch(`${API_BASE}/jobs/${jobId}/resume`, {method:'POST'});
-      const data = await r.json();
-      if (r.status === 410) {
-        if (errEl) {
-          errEl.textContent = '⚠ File audio rimosso — ricarica con "Nuovo Job"';
-          errEl.style.display = 'inline';
-        }
-        btn.disabled = false;
-        btn.innerHTML = origHtml;
-        if (jobsMap[jobId]) { jobsMap[jobId]._fileMissing = true; renderAll(); }
-      } else if (!r.ok) {
-        if (errEl) { errEl.textContent = data.detail || data.error || 'Errore'; errEl.style.display='inline'; }
-        btn.disabled = false;
-        btn.innerHTML = origHtml;
-      } else {
-        if (jobsMap[jobId]) {
-          jobsMap[jobId].status = 'PENDING';
-          jobsMap[jobId].step = 'RESUMED';
-          renderAll();
-        }
-        connectStream();
-      }
-    } catch(e) {
-      if (errEl) { errEl.textContent = `Errore: ${e.message}`; errEl.style.display='inline'; }
-      btn.disabled = false;
-      btn.innerHTML = origHtml;
-    }
-  });
-
-  // ── Delete popup overlay ──────────────────────────────────────────────────
-  document.addEventListener('click', e => {
-    const btn = e.target.closest('.delete-btn');
-    if (!btn) return;
-    const jobId = btn.dataset.jobId;
-    const job   = jobsMap[jobId] || {};
-    showDeleteModal(jobId, job.status || 'COMPLETED', `${job.customer||'?'} — ${job.project||'?'}`);
-  });
-
-  function showDeleteModal(jobId, status, title) {
-    // Rimuovi overlay precedente
-    document.getElementById('del-overlay')?.remove();
-
-    const isCompleted = status === 'COMPLETED';
-    const isPaused    = status === 'PAUSED';
-    const isFailed    = status === 'FAILED';
-    const isDeleted   = status === 'DELETED';
-
-    // Opzioni in base allo stato
-    let optsHtml = '';
-    if (!isDeleted) {
-      optsHtml += delOpt('audio', jobId,
-        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>`,
-        'Cancella audio',
-        'Rimuove il file audio originale (MinIO + disco). Trascrizione e RAG intatti.');
-      optsHtml += delOpt('transcript', jobId,
-        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
-        'Cancella trascrizione',
-        'Rimuove audio + JSON/TXT da MinIO. Il RAG e i dati associati restano.');
-      optsHtml += delOpt('rag', jobId,
-        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`,
-        'Cancella tutto (mantieni storico)',
-        'Rimuove audio, trascrizione, RAG, speaker alias e minute. Il job resta nello storico come DELETED.',
-        true);
-    } else {
-      optsHtml += delOpt('purge', jobId,
-        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`,
-        'Elimina definitivamente',
-        'Rimuove ogni traccia del job da Redis e PostgreSQL. Irreversibile.',
-        true);
-    }
-
-    const overlay = document.createElement('div');
-    overlay.id = 'del-overlay';
-    overlay.className = 'del-overlay';
-    overlay.innerHTML = `
-      <div class="del-modal">
-        <div class="del-modal-header">
-          <div>
-            <div class="del-modal-title">Elimina dati</div>
-            <div class="del-modal-sub">${title}</div>
-          </div>
-          <button class="del-modal-close" id="del-close">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-        <div class="del-modal-body" id="del-modal-body">${optsHtml}</div>
-        <div class="del-modal-footer">
-          <button class="del-cancel" id="del-close-footer">Annulla</button>
-        </div>
-      </div>`;
-
-    document.body.appendChild(overlay);
-
-    // Chiudi su X, Annulla, o click sfondo
-    overlay.querySelector('#del-close').onclick       = () => overlay.remove();
-    overlay.querySelector('#del-close-footer').onclick = () => overlay.remove();
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-    // Click su opzione
-    overlay.querySelectorAll('.del-opt').forEach(opt => {
-      opt.addEventListener('click', () => execDelete(opt.dataset.jobId, opt.dataset.scope, overlay));
-    });
-  }
-
-  function delOpt(scope, jobId, icon, label, desc, danger=false) {
-    return `<button class="del-opt${danger?' danger':''}" data-scope="${scope}" data-job-id="${jobId}">
-      <div class="del-opt-icon">${icon}</div>
-      <div><div class="del-opt-label">${label}</div><div class="del-opt-desc">${desc}</div></div>
-    </button>`;
-  }
-
-  async function execDelete(jobId, scope, overlay) {
-    const body = overlay.querySelector('#del-modal-body');
-    body.innerHTML = `<div class="del-modal-status">Eliminazione in corso…</div>`;
-    overlay.querySelector('#del-close-footer').disabled = true;
-    try {
-      const r = await fetch(`${API_BASE}/jobs/${jobId}?scope=${scope}`, {method:'DELETE'});
-      const data = await r.json().catch(()=>({}));
-      if (!r.ok) {
-        body.innerHTML = `<div class="del-modal-status" style="color:var(--error)">Errore: ${data.detail||data.error||r.status}</div>`;
-        overlay.querySelector('#del-close-footer').disabled = false;
-        overlay.querySelector('#del-close-footer').textContent = 'Chiudi';
-        return;
-      }
-      // Aggiorna mappa locale
-      if (scope === 'purge') {
-        delete jobsMap[jobId];
-        if (openHistId === jobId) openHistId = null;
-      } else if (scope === 'rag') {
-        if (jobsMap[jobId]) { jobsMap[jobId].status='DELETED'; jobsMap[jobId].output_json_url=''; jobsMap[jobId].output_txt_url=''; jobsMap[jobId].audio_url=''; }
-      } else if (scope === 'transcript') {
-        if (jobsMap[jobId]) { jobsMap[jobId].output_json_url=''; jobsMap[jobId].output_txt_url=''; jobsMap[jobId].audio_url=''; }
-      } else if (scope === 'audio') {
-        if (jobsMap[jobId]) { jobsMap[jobId].audio_url=''; }
-      }
-      overlay.remove();
-      renderAll();
-    } catch(e) {
-      body.innerHTML = `<div class="del-modal-status" style="color:var(--error)">Errore: ${e.message}</div>`;
-      overlay.querySelector('#del-close-footer').disabled = false;
-      overlay.querySelector('#del-close-footer').textContent = 'Chiudi';
-    }
+    } catch(e){alert(`Errore: ${e.message}`);}
   }
 </script>
 </body>

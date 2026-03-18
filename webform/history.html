@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Minute — Storico Trascrizioni</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <header>
+    <a href="index.html" class="logo">
+      <div class="logo-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>
+        </svg>
+      </div>
+      Minute
+    </a>
+    <nav class="top-nav">
+      <a href="index.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Trascrizione</span>
+      </a>
+      <a href="history.html" class="nav-link active">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Storico</span>
+      </a>
+      <a href="settings.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </a>
+    </nav>
+    <div class="header-stack">
+      <div class="stack-pill"><span class="dot" id="api-dot"></span>whisperx</div>
+      <div class="stack-pill"><span class="dot" id="sse-dot"></span>sse</div>
+      <div class="stack-pill"><span class="dot" id="minutes-dot"></span>minutes</div>
+    </div>
+  </header>
+
+  <main class="history-main">
+
+    <!-- LEFT: job list -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="panel-title">Storico Trascrizioni</span>
+        <span class="stream-badge stream-idle" id="stream-status" style="margin-left:auto">In attesa</span>
+      </div>
+
+      <div class="status-empty" id="list-empty">
+        <div class="status-empty-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <div class="status-empty-title">Nessuna trascrizione</div>
+        <div class="status-empty-sub"><a href="index.html" style="color:var(--accent);text-decoration:none">Invia il primo job →</a></div>
+      </div>
+
+      <div class="history-section" id="job-list-wrap" style="display:none">
+        <div class="history-header" style="display:flex;align-items:center;justify-content:space-between">
+          <span class="section-label" style="margin-bottom:0">Tutte le trascrizioni</span>
+          <span id="job-count" style="font-size:11px;color:var(--text-muted)"></span>
+        </div>
+        <div id="job-list"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: viewer -->
+    <div class="panel panel-sticky" id="viewer-panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span class="panel-title" id="viewer-panel-title">Anteprima</span>
+      </div>
+
+      <div class="viewer-empty" id="viewer-empty">
+        <div class="viewer-empty-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="viewer-empty-text">Seleziona una voce dello storico<br>per visualizzarne il contenuto</div>
+      </div>
+
+      <div id="viewer-content" style="display:none">
+        <div class="viewer-tabs" id="viewer-tabs"></div>
+        <div class="viewer-body" id="viewer-body"></div>
+        <div class="viewer-actions" id="viewer-actions">
+          <span class="viewer-title" id="viewer-file-title"></span>
+          <button class="btn-secondary" style="padding:5px 11px;font-size:11px" id="viewer-copy-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copia
+          </button>
+          <a class="btn-secondary" style="padding:5px 11px;font-size:11px" id="viewer-dl-btn" href="#" download target="_blank" rel="noopener">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+</div>
+
+<!-- Delete modal -->
+<div id="del-overlay" style="display:none" class="del-overlay">
+  <div class="del-modal">
+    <div class="del-modal-header">
+      <div>
+        <div class="del-modal-title">Elimina dati</div>
+        <div class="del-modal-sub" id="del-modal-sub"></div>
+      </div>
+      <button class="del-modal-close" onclick="closeDelModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="del-modal-body" id="del-modal-body"></div>
+    <div class="del-modal-footer"><button class="del-cancel" onclick="closeDelModal()">Annulla</button></div>
+  </div>
+</div>
+
+<script>
+  const API_BASE     = "http://localhost:9200";
+  const SSE_BASE     = "http://localhost:9400";
+  const MINUTES_BASE = "http://localhost:9600";
+
+  let jobsMap = {}, openJobId = null, eventSource = null;
+  let viewerCurrentUrl = '', viewerCurrentText = '';
+  let jobMinutesCache = {};  // job_id -> [{ minutes_id, template, output_url, status, ... }]
+
+  function fixMinioUrl(url) {
+    if (!url) return url;
+    return url.replace(/^http:\/\/minio:9000/, 'http://localhost:9000');
+  }
+
+  const $ = id => document.getElementById(id);
+  const fmt = iso => { try { return new Date(iso).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return iso||'—'; } };
+  const jobTitle = job => `${job.customer||'?'} — ${job.project||'?'}`;
+
+  const TERMINAL = ["COMPLETED","FAILED","DELETED"];
+  const PIPELINE = [
+    {key:"ENQUEUED",label:"In coda"},{key:"REQUEUED",label:"Riaccodato"},
+    {key:"TRANSCRIBING",label:"Trascrizione"},{key:"DIARIZING",label:"Diarizzazione"},
+    {key:"FORMATTING",label:"Formattazione"},{key:"UPLOADING",label:"Upload MinIO"},
+    {key:"COMPLETED",label:"Completato"},
+  ];
+
+  window.addEventListener('load', async () => {
+    await checkHealth();
+    await loadJobs();
+    connectStream();
+  });
+
+  async function checkHealth() {
+    for (const [id, url] of [['api-dot',`${API_BASE}/health`],['sse-dot',`${SSE_BASE}/health`],['minutes-dot',`${MINUTES_BASE}/health`]]) {
+      try { const r=await fetch(url,{signal:AbortSignal.timeout(3000)}); $(id).className=r.ok?'dot live':'dot'; } catch { $(id).className='dot'; }
+    }
+  }
+
+  async function loadJobs() {
+    try {
+      const r = await fetch(`${SSE_BASE}/jobs`); if(!r.ok) return;
+      const data = await r.json();
+      for (const job of data.jobs) jobsMap[job.job_id] = job;
+      renderList();
+    } catch(e) {}
+  }
+
+  function connectStream() {
+    if (eventSource) { eventSource.close(); }
+    eventSource = new EventSource(`${SSE_BASE}/events?all=1`);
+    setStreamStatus('connecting');
+    eventSource.addEventListener('open', () => { setStreamStatus('connected'); $('sse-dot').className='dot live'; });
+    eventSource.addEventListener('job_update', e => { const j=JSON.parse(e.data); jobsMap[j.job_id]=j; renderList(); });
+    eventSource.addEventListener('stream_end', () => { setStreamStatus('idle'); setTimeout(connectStream,10000); });
+    eventSource.addEventListener('error', () => { setStreamStatus('error'); $('sse-dot').className='dot'; eventSource.close(); setTimeout(connectStream,8000); });
+  }
+
+  function setStreamStatus(state) {
+    const map={connecting:['stream-connecting','Connessione…'],connected:['stream-live','Live'],idle:['stream-idle','In attesa'],error:['stream-error','Disconnesso']};
+    const [cls,txt]=map[state]??map.idle;
+    $('stream-status').className='stream-badge '+cls; $('stream-status').textContent=txt;
+  }
+
+  function renderList() {
+    const all = Object.values(jobsMap).sort((a,b)=>(b.created_at??'').localeCompare(a.created_at??''));
+    if (!all.length) { $('list-empty').style.display='flex'; $('job-list-wrap').style.display='none'; return; }
+    $('list-empty').style.display='none'; $('job-list-wrap').style.display='block';
+    $('job-count').textContent = `${all.length} ${all.length===1?'lavoro':'lavori'}`;
+
+    $('job-list').innerHTML = all.map(job => {
+      const isOpen = openJobId === job.job_id;
+      const isCompleted = job.status==='COMPLETED';
+      const isFailed    = job.status==='FAILED';
+      const isPaused    = job.status==='PAUSED';
+      const isDeleted   = job.status==='DELETED';
+      const isActive    = !TERMINAL.includes(job.status);
+      const trash = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+
+      let body = `<div class="hist-meta">
+        <div class="hist-meta-row"><span class="hist-meta-label">Data</span><span class="hist-meta-value">${fmt(job.created_at)}</span></div>
+        ${job.updated_at?`<div class="hist-meta-row"><span class="hist-meta-label">Fine</span><span class="hist-meta-value">${fmt(job.updated_at)}</span></div>`:''}
+        <div class="hist-meta-row"><span class="hist-meta-label">Stato</span><span class="hist-meta-value">${badgeHtml(job.status)}</span></div>
+        ${job.language?`<div class="hist-meta-row"><span class="hist-meta-label">Lingua</span><span class="hist-meta-value">${job.language}</span></div>`:''}
+      </div>`;
+
+      if (isActive) {
+        // progress + pipeline for active jobs
+        const pct = calcPercent(job.step, job.status);
+        body += `<div style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span class="step-chip">${job.step||'—'}</span>
+            ${pct!==null?`<span style="font-size:10px;color:var(--text-muted)">${pct}%</span>`:''}
+          </div>
+          <div class="progress-track"><div class="progress-fill${job.status==='PAUSED'?' paused-bar':''}" style="width:${pct!==null?pct+'%':'40%'};${pct===null?'animation:indeterminate 1.4s ease-in-out infinite':''};"></div></div>
+        </div>`;
+      }
+
+      if (isCompleted) {
+        const stackFiles = [];
+        if (job.output_txt_url)  stackFiles.push({ url: job.output_txt_url,  type: 'txt',   label: 'result.txt',  viewable: true });
+        if (job.output_json_url) stackFiles.push({ url: job.output_json_url, type: 'json',  label: 'result.json', viewable: true });
+        if (job.audio_url)       stackFiles.push({ url: job.audio_url,       type: 'audio', label: 'audio',       viewable: false });
+        const minutesList = jobMinutesCache[job.job_id] || [];
+        minutesList.filter(m => m.status === 'COMPLETED' && m.output_url).forEach(m => {
+          const url = fixMinioUrl(m.output_url);
+          const name = (m.template || 'minuta').replace(/\s+/g, '-') + '.md';
+          stackFiles.push({ url, type: 'md', label: name, viewable: true, minutesId: m.minutes_id });
+        });
+        if (stackFiles.length) {
+          body += `<div class="file-stack">
+            <div class="file-stack-title">File associati</div>
+            ${stackFiles.map(f => {
+              const escUrl = (f.url || '').replace(/"/g, '&quot;');
+              const escLabel = (f.label || '').replace(/"/g, '&quot;');
+              const viewBtn = f.viewable
+                ? `<button class="btn-action view-file-btn" data-url="${escUrl}" data-type="${f.type}" data-label="${escLabel}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Visualizza</button>`
+                : (f.type === 'audio' ? `<a class="btn-action" href="${escUrl}" target="_blank" rel="noopener">Apri</a>` : '');
+              const dlBtn = `<a class="btn-action" href="${escUrl}" download="${escLabel}" target="_blank" rel="noopener"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download</a>`;
+              const delBtn = (f.type === 'md' && f.minutesId) ? `<button class="btn-action btn-delete delete-minute-file-btn" data-job-id="${job.job_id}" data-minutes-id="${f.minutesId}" type="button" title="Elimina minuta"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>Elimina</button>` : '';
+              return `<div class="file-stack-row"><div class="file-stack-icon ${f.type}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><span class="file-stack-name">${escLabel}</span><div class="file-stack-actions">${viewBtn}${dlBtn}${delBtn}</div></div>`;
+            }).join('')}
+          </div>`;
+        }
+        body += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+          <a class="btn-action" href="speakers.html?job_id=${job.job_id}">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Associa Speaker
+          </a>
+          <a class="btn-action" href="minutes.html?job_id=${job.job_id}">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Gestisci Minuta
+          </a>
+          <button class="btn-delete delete-job-btn" data-job-id="${job.job_id}" style="margin-left:auto">${trash} Elimina</button>
+        </div>`;
+      }
+
+      if (isFailed) {
+        body += `<div class="error-box" style="margin-bottom:10px"><div class="error-title">Job fallito</div><div class="error-msg">${job.error||'Errore sconosciuto'}</div></div>
+        <button class="btn-delete delete-job-btn" data-job-id="${job.job_id}">${trash} Elimina</button>`;
+      }
+
+      if (isPaused) {
+        const ps=(job.step||'').replace(/^PAUSED_AT_/i,'').replace(/_/g,' ').toLowerCase();
+        body += `<div class="paused-warning" style="margin-bottom:10px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/></svg>
+          <div class="paused-warning-text"><strong>Sospesa durante: ${ps}</strong></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-resume resume-job-btn" data-job-id="${job.job_id}"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Riprendi</button>
+          <button class="btn-delete delete-job-btn" data-job-id="${job.job_id}">${trash} Elimina</button>
+        </div>`;
+      }
+
+      if (isDeleted) {
+        body += `<div style="font-size:12px;color:var(--text-muted);padding:6px 0 10px">File eliminati — rimangono solo i metadati.</div>
+        <button class="btn-delete delete-job-btn" data-job-id="${job.job_id}" style="color:var(--error);border-color:#fecaca;background:var(--error-light)">${trash} Elimina definitivamente</button>`;
+      }
+
+      return `<div class="hist-row${isActive?' active-job':''}${isOpen?' open':''}" data-job-id="${job.job_id}">
+        <div class="hist-row-header" onclick="toggleJob('${job.job_id}')" style="cursor:pointer">
+          <div class="hist-row-info">
+            <span class="hist-row-name">${jobTitle(job)}</span>
+            <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace">${fmt(job.created_at)}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            ${badgeHtml(job.status)}
+            <svg class="hist-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+        <div class="hist-accordion">${body}</div>
+      </div>`;
+    }).join('');
+
+    // bind buttons
+    $('job-list').querySelectorAll('.view-file-btn').forEach(btn => {
+      btn.addEventListener('click', () => viewFile(btn.dataset.url, btn.dataset.type, btn.dataset.label));
+    });
+    $('job-list').querySelectorAll('.delete-job-btn').forEach(btn => {
+      btn.addEventListener('click', e => { e.stopPropagation(); showDeleteModal(btn.dataset.jobId); });
+    });
+    $('job-list').querySelectorAll('.delete-minute-file-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const minutesId = btn.dataset.minutesId;
+        const jobId = btn.dataset.jobId;
+        if (!minutesId || !confirm('Eliminare questa minuta?')) return;
+        btn.disabled = true;
+        try {
+          const r = await fetch(`${MINUTES_BASE}/minutes/jobs/${minutesId}`, { method: 'DELETE' });
+          if (!r.ok) throw new Error(await r.text());
+          await loadMinutesForJobInHistory(jobId);
+          renderList();
+        } catch (err) {
+          alert('Eliminazione fallita: ' + (err.message || err));
+        }
+        btn.disabled = false;
+      });
+    });
+    $('job-list').querySelectorAll('.resume-job-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation(); btn.disabled=true;
+        try { await fetch(`${API_BASE}/jobs/${btn.dataset.jobId}/resume`,{method:'POST'}); connectStream(); }
+        catch(err) { alert(err.message); btn.disabled=false; }
+      });
+    });
+  }
+
+  async function loadMinutesForJobInHistory(jobId) {
+    try {
+      const r = await fetch(`${MINUTES_BASE}/minutes/jobs?job_id=${jobId}&limit=20`);
+      if (!r.ok) return;
+      const data = await r.json();
+      jobMinutesCache[jobId] = data.jobs || [];
+    } catch { jobMinutesCache[jobId] = []; }
+  }
+
+  function toggleJob(id) {
+    if (openJobId === id) { openJobId = null; renderList(); return; }
+    openJobId = id;
+    const job = jobsMap[id];
+    if (job && job.status === 'COMPLETED' && !jobMinutesCache[id]) {
+      loadMinutesForJobInHistory(id).then(() => renderList());
+    } else {
+      renderList();
+    }
+  }
+
+  function badgeHtml(status) {
+    const map={PENDING:['pending','In attesa'],ENQUEUED:['pending','In coda'],WORKING:['working','In elaborazione'],COMPLETED:['completed','Completato'],FAILED:['failed','Fallito'],PAUSED:['paused','In pausa'],DELETED:['deleted','Eliminato']};
+    const [cls,lbl]=map[status]??['pending',status];
+    return `<span class="status-badge ${cls}"><span class="dot"></span>${lbl}</span>`;
+  }
+
+  function calcPercent(step, status) {
+    if(status==='COMPLETED') return 100; if(status==='FAILED') return null;
+    const m=(step||'').match(/(\d+)pct/i); if(m) return parseInt(m[1]);
+    const idx=PIPELINE.findIndex(s=>(step||'').toUpperCase().startsWith(s.key));
+    if(idx>=0) return Math.round(((idx+0.5)/PIPELINE.length)*100);
+    return null;
+  }
+
+  /* ── Viewer ── */
+  async function viewFile(url, type, label) {
+    $('viewer-empty').style.display='none';
+    $('viewer-content').style.display='block';
+    $('viewer-panel-title').textContent = label;
+    $('viewer-file-title').textContent  = label;
+    $('viewer-dl-btn').href = url;
+    $('viewer-dl-btn').download = label;
+
+    // Build tabs: for JSON/TXT show plain; for md show plain + rendered
+    const isMd   = type === 'md'  || label.endsWith('.md');
+    const isJson = type === 'json';
+    const tabs = isMd
+      ? [{id:'md-render',label:'Formattato'},{id:'md-plain',label:'Testo semplice'}]
+      : [{id:'plain',label: isJson ? 'JSON' : 'Testo'}];
+
+    $('viewer-tabs').innerHTML = tabs.map((t,i)=>
+      `<div class="viewer-tab${i===0?' active':''}" data-tab="${t.id}" onclick="switchTab('${t.id}')">${t.label}</div>`
+    ).join('');
+
+    $('viewer-body').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;padding:40px;color:var(--text-muted);font-size:12px">Caricamento…</div>`;
+
+    try {
+      const r = await fetch(url); if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const text = await r.text();
+      viewerCurrentText = text;
+      viewerCurrentUrl  = url;
+
+      if (isMd) {
+        $('viewer-body').innerHTML = `
+          <div id="pane-md-render" class="md-preview">${renderMarkdown(text)}</div>
+          <div id="pane-md-plain" class="viewer-plain" style="display:none">${escapeHtml(text)}</div>`;
+      } else if (isJson) {
+        let pretty = text;
+        try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+        $('viewer-body').innerHTML = `<div id="pane-plain" class="viewer-plain">${escapeHtml(pretty)}</div>`;
+      } else {
+        $('viewer-body').innerHTML = `<div id="pane-plain" class="viewer-plain">${escapeHtml(text)}</div>`;
+      }
+    } catch(e) {
+      $('viewer-body').innerHTML = `<div class="error-box"><div class="error-title">Errore caricamento</div><div class="error-msg">${e.message}</div></div>`;
+    }
+  }
+
+  function switchTab(tabId) {
+    $('viewer-tabs').querySelectorAll('.viewer-tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tabId));
+    $('viewer-body').querySelectorAll('[id^="pane-"]').forEach(p => p.style.display = p.id==='pane-'+tabId ? '' : 'none');
+  }
+
+  $('viewer-copy-btn').addEventListener('click', () => {
+    if (!viewerCurrentText) return;
+    navigator.clipboard.writeText(viewerCurrentText).then(() => {
+      const btn = $('viewer-copy-btn'); const orig = btn.innerHTML;
+      btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copiato';
+      setTimeout(()=>btn.innerHTML=orig, 1800);
+    });
+  });
+
+  function renderMarkdown(md) {
+    let h = md
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // tables
+    h = h.replace(/^\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/gm, (_, head, rows) => {
+      const ths = head.split('|').filter(c=>c.trim()).map(c=>`<th>${c.trim()}</th>`).join('');
+      const trs = rows.trim().split('\n').map(r=>{
+        const tds = r.split('|').filter(c=>c.trim()!==undefined&&r.includes('|')).filter((_,i,a)=>i>0&&i<a.length-1).map(c=>`<td>${c.trim()}</td>`).join('');
+        return tds?`<tr>${tds}</tr>`:'';
+      }).filter(Boolean).join('');
+      return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+    });
+    h = h.replace(/^#{4}\s+(.+)$/gm,'<h4>$1</h4>');
+    h = h.replace(/^#{3}\s+(.+)$/gm,'<h3>$1</h3>');
+    h = h.replace(/^#{2}\s+(.+)$/gm,'<h2>$1</h2>');
+    h = h.replace(/^#{1}\s+(.+)$/gm,'<h1>$1</h1>');
+    h = h.replace(/^-{3,}$/gm,'<hr>');
+    h = h.replace(/^&gt;\s?(.+)$/gm,'<blockquote>$1</blockquote>');
+    h = h.replace(/^(\d+)\.\s+(.+)$/gm,'<li data-ol>$2</li>');
+    h = h.replace(/^[-*]\s+(.+)$/gm,'<li>$1</li>');
+    h = h.replace(/(<li[^>]*>.*<\/li>\n?)+/g, m => m.includes('data-ol') ? `<ol>${m.replace(/ data-ol/g,'')}</ol>` : `<ul>${m}</ul>`);
+    h = h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    h = h.replace(/\*(.+?)\*/g,'<em>$1</em>');
+    h = h.replace(/`(.+?)`/g,'<code>$1</code>');
+    h = h.replace(/\n\n+/g,'</p><p>');
+    return `<p>${h}</p>`.replace(/<p>(<h[1-4]>|<\/h[1-4]>|<table>|<\/table>|<ul>|<\/ul>|<ol>|<\/ol>|<hr>|<blockquote>)/g,'$1').replace(/(<\/h[1-4]>|<\/table>|<\/ul>|<\/ol>|<hr>|<\/blockquote>)<\/p>/g,'$1');
+  }
+
+  function escapeHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  /* ── Delete modal ── */
+  let delJobId = null;
+  function showDeleteModal(jobId) {
+    delJobId = jobId;
+    const job = jobsMap[jobId]||{};
+    $('del-modal-sub').textContent = jobTitle(job);
+    const isDeleted = job.status==='DELETED';
+    const trash = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+    if (!isDeleted) {
+      $('del-modal-body').innerHTML =
+        delOpt('audio',    trash, 'Cancella audio',          'Rimuove il file audio originale. Trascrizione intatta.')+
+        delOpt('transcript',trash,'Cancella trascrizione',    'Rimuove audio + JSON/TXT da MinIO.')+
+        delOpt('rag',      trash, 'Cancella tutto',           'Rimuove audio, trascrizione, RAG, minute. Il job resta come DELETED.', true);
+    } else {
+      $('del-modal-body').innerHTML = delOpt('purge', trash, 'Elimina definitivamente', 'Rimuove ogni traccia del job. Irreversibile.', true);
+    }
+    $('del-overlay').style.display='flex';
+    $('del-modal-body').querySelectorAll('.del-opt').forEach(opt => {
+      opt.addEventListener('click', () => execDelete(opt.dataset.scope));
+    });
+  }
+
+  function delOpt(scope, icon, label, desc, danger=false) {
+    return `<button class="del-opt${danger?' danger':''}" data-scope="${scope}">
+      <div class="del-opt-icon">${icon}</div>
+      <div><div class="del-opt-label">${label}</div><div class="del-opt-desc">${desc}</div></div>
+    </button>`;
+  }
+
+  function closeDelModal() {
+    $('del-overlay').style.display='none';
+    $('del-modal-body').innerHTML='';
+  }
+
+  $('del-overlay').addEventListener('click', e => { if(e.target===$('del-overlay')) closeDelModal(); });
+
+  async function execDelete(scope) {
+    $('del-modal-body').innerHTML=`<div class="del-modal-status">Eliminazione…</div>`;
+    try {
+      const r = await fetch(`${API_BASE}/jobs/${delJobId}?scope=${scope}`,{method:'DELETE'});
+      const data = await r.json().catch(()=>({}));
+      if (!r.ok) { $('del-modal-body').innerHTML=`<div class="del-modal-status" style="color:var(--error)">Errore: ${data.detail||data.error||r.status}</div>`; return; }
+      if (scope==='purge') { delete jobsMap[delJobId]; if(openJobId===delJobId) openJobId=null; }
+      else if (scope==='rag') { if(jobsMap[delJobId]) { jobsMap[delJobId].status='DELETED'; jobsMap[delJobId].output_json_url=''; jobsMap[delJobId].output_txt_url=''; } }
+      else if (scope==='transcript') { if(jobsMap[delJobId]) { jobsMap[delJobId].output_json_url=''; jobsMap[delJobId].output_txt_url=''; } }
+      closeDelModal();
+      renderList();
+    } catch(e) { $('del-modal-body').innerHTML=`<div class="del-modal-status" style="color:var(--error)">Errore: ${e.message}</div>`; }
+  }
+</script>
+</body>
+</html>

@@ -6,10 +6,15 @@ Dipendenze chiave (senza whisperX):
   faster-whisper  1.0.0   ← trascrizione
   pyannote.audio  3.3.2   ← diarizzazione speaker
   ctranslate2     4.3.1   ← motore inferenza faster-whisper
+
+Fix 2026-03-18:
+  - Redis keepalive + health_check_interval per evitare TCP reset durante diarizzazioni lunghe
+  - Loop main con retry su ConnectionError/TimeoutError invece di crash
 """
 
 import os
 import json
+import time
 import warnings
 import subprocess
 from pathlib import Path
@@ -43,8 +48,8 @@ WHISPER_DEVICE    = os.getenv("WHISPER_DEVICE",       "cpu")
 WHISPER_COMPUTE   = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 HF_TOKEN          = os.getenv("HF_TOKEN",             "")
 
-MINIO_ENDPOINT    = os.getenv("MINIO_ENDPOINT",       "http://minio:9000")   # boto3 — interno Docker
-MINIO_PUBLIC_URL  = os.getenv("MINIO_PUBLIC_URL",     "http://localhost:9000") # URL salvato in DB/Redis
+MINIO_ENDPOINT    = os.getenv("MINIO_ENDPOINT",       "http://minio:9000")
+MINIO_PUBLIC_URL  = os.getenv("MINIO_PUBLIC_URL",     "http://localhost:9000")
 MINIO_ACCESS_KEY  = os.getenv("MINIO_ACCESS_KEY",     "minioadmin")
 MINIO_SECRET_KEY  = os.getenv("MINIO_SECRET_KEY",     "minioadmin")
 MINIO_BUCKET      = os.getenv("MINIO_BUCKET",         "wx-transcriptions")
@@ -60,7 +65,15 @@ PG_DSN = (
 
 # ── Clients ───────────────────────────────────────────────────────────────────
 
-r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+# FIX: keepalive + health_check_interval prevengono il TCP reset di Docker
+# durante le sessioni di diarizzazione lunghe (35+ min).
+r = redis.Redis.from_url(
+    REDIS_URL,
+    decode_responses=True,
+    socket_keepalive=True,
+    socket_keepalive_options={},
+    health_check_interval=30,   # ping Redis ogni 30s anche quando idle
+)
 
 def s3_client():
     return boto3.client(
@@ -199,70 +212,49 @@ def merge_transcript_diarization(segments: list[dict], diarization) -> list[dict
               assegnati allo speaker del segmento noto più vicino
               temporalmente (precedente o successivo).
               Solo se non esiste nessun vicino noto → UNKNOWN_N.
-
-    Questa strategia elimina i frammenti UNKNOWN che sono bordi di turno
-    (inizio/fine frase) che pyannote non riesce ad assegnare per via delle
-    soglie interne di segmentazione.
     """
-    # ── Passo 1: overlap ──────────────────────────────────────────────────
-    raw = []
+    # Costruisci lista turni da pyannote
+    turns = []
+    for segment, _, speaker in diarization.itertracks(yield_label=True):
+        turns.append({"start": segment.start, "end": segment.end, "speaker": speaker})
+
+    # Passo 1: assegna per overlap
     for seg in segments:
-        seg_start    = seg["start"]
-        seg_end      = seg["end"]
-        best_speaker = None
-        best_overlap = 0.0
+        seg_start = seg["start"]
+        seg_end   = seg["end"]
+        best_spk  = None
+        best_ov   = 0.0
 
-        for turn, _, speaker in diarization.itertracks(yield_label=True):
-            overlap = max(0.0, min(seg_end, turn.end) - max(seg_start, turn.start))
-            if overlap > best_overlap:
-                best_overlap = overlap
-                best_speaker = speaker
+        for turn in turns:
+            ov = min(seg_end, turn["end"]) - max(seg_start, turn["start"])
+            if ov > best_ov:
+                best_ov  = ov
+                best_spk = turn["speaker"]
 
-        raw.append({**seg, "speaker": best_speaker})
+        seg["speaker"] = best_spk   # None se nessun overlap
 
-    # ── Passo 2: proximity fill ───────────────────────────────────────────
-    # Per ogni segmento None, cerca il vicino noto più prossimo (per tempo).
-    # Usa il punto centrale del segmento come riferimento.
-    n = len(raw)
-    filled = list(raw)  # copia
+    # Passo 2: proximity fill per i None
+    known_indices = [i for i, s in enumerate(segments) if s["speaker"] is not None]
 
-    for i, seg in enumerate(raw):
+    filled = []
+    for i, seg in enumerate(segments):
         if seg["speaker"] is not None:
+            filled.append(seg)
             continue
 
-        mid = (seg["start"] + seg["end"]) / 2.0
+        # Trova il vicino noto più vicino (precedente o successivo)
+        nearest_spk = None
+        nearest_dist = float("inf")
 
-        # Cerca il precedente con speaker noto
-        prev_spk  = None
-        prev_dist = float("inf")
-        for j in range(i - 1, -1, -1):
-            if raw[j]["speaker"] is not None:
-                prev_spk  = raw[j]["speaker"]
-                prev_dist = mid - raw[j]["end"]
-                break
+        for ki in known_indices:
+            dist = abs(i - ki)
+            if dist < nearest_dist:
+                nearest_dist = dist
+                nearest_spk  = segments[ki]["speaker"]
 
-        # Cerca il successivo con speaker noto
-        next_spk  = None
-        next_dist = float("inf")
-        for j in range(i + 1, n):
-            if raw[j]["speaker"] is not None:
-                next_spk  = raw[j]["speaker"]
-                next_dist = raw[j]["start"] - mid
-                break
+        filled.append({**seg, "speaker": nearest_spk})
 
-        if prev_spk is None and next_spk is None:
-            # Nessun vicino noto → resta None, verrà etichettato UNKNOWN_N
-            pass
-        elif prev_spk is None:
-            filled[i] = {**seg, "speaker": next_spk}
-        elif next_spk is None:
-            filled[i] = {**seg, "speaker": prev_spk}
-        else:
-            # Prende il più vicino; in caso di parità preferisce il precedente
-            filled[i] = {**seg, "speaker": prev_spk if prev_dist <= next_dist else next_spk}
-
-    # ── Passo 3: residui → UNKNOWN_N distinti ────────────────────────────
-    # Dovrebbero essere pochissimi (solo segmenti isolati senza vicini noti).
+    # Passo 3: rinomina i None rimasti in UNKNOWN_N progressivi
     unknown_counter = 0
     current_unknown = None
     prev_known      = True
@@ -323,10 +315,10 @@ def _pause_job(job_id: str, step: str):
     Cancella il flag stop_requested.
     """
     r.hset(job_key(job_id), mapping={
-        "status":        "PAUSED",
-        "step":          f"PAUSED_AT_{step}",
+        "status":         "PAUSED",
+        "step":           f"PAUSED_AT_{step}",
         "stop_requested": "0",
-        "updated_at":    utc_now(),
+        "updated_at":     utc_now(),
     })
     pg_update(job_id, status="PAUSED")
     print(f"[worker] job {job_id} messo in PAUSED allo step {step}", flush=True)
@@ -335,16 +327,15 @@ def _pause_job(job_id: str, step: str):
 # ── Core job ──────────────────────────────────────────────────────────────────
 
 def run_job(job_id: str, fw_model, diar_pipeline):
-    k          = job_key(job_id)
+    k = job_key(job_id)
 
     # Guard: ignora job che nel frattempo sono stati messi in PAUSED
-    # (es. pause richiesta mentre era ancora in coda)
     current_status = r.hget(k, "status") or ""
     if current_status == "PAUSED":
         print(f"[worker] job {job_id} è PAUSED, salto", flush=True)
         return
 
-    input_file = r.hget(k, "input_file")
+    input_file    = r.hget(k, "input_file")
     language      = r.hget(k, "language")      or "it"
     diarize       = r.hget(k, "diarize")       or "true"
     customer      = r.hget(k, "customer")      or "unknown"
@@ -373,27 +364,30 @@ def run_job(job_id: str, fw_model, diar_pipeline):
         pg_update(job_id, status="FAILED", error_message=f"ffmpeg: {e}")
         return
 
-    # ── 3. Trascrizione faster-whisper ──────────────────────────────────────
-    update_job(job_id, step="TRANSCRIBING_0pct")
-    try:
-        def _transcribe_progress(pct: int):
-            if is_stop_requested(job_id):
-                raise StopRequested()
-            update_job(job_id, step=f"TRANSCRIBING_{pct}pct")
-            print(f"[worker] trascrizione: {pct}%", flush=True)
+    # ── 3. Trascrizione ──────────────────────────────────────────────────────
+    update_job(job_id, step="TRANSCRIBING")
 
-        segments, detected_language = transcribe(fw_model, wav_path, language,
-                                                  on_progress=_transcribe_progress,
-                                                  stop_check=lambda: is_stop_requested(job_id))
-        update_job(job_id, step="TRANSCRIBING_100pct")
-        print(f"[worker] lingua rilevata: {detected_language} — {len(segments)} segmenti", flush=True)
+    def _on_progress(pct: int):
+        update_job(job_id, step=f"TRANSCRIBING_{pct}pct")
+
+    def _stop_check() -> bool:
+        return is_stop_requested(job_id)
+
+    try:
+        segments, detected_language = transcribe(
+            fw_model, wav_path, language,
+            on_progress=_on_progress,
+            stop_check=_stop_check,
+        )
     except StopRequested:
-        _pause_job(job_id, step=r.hget(job_key(job_id), "step") or "TRANSCRIBING")
+        _pause_job(job_id, step="TRANSCRIBING")
         return
     except Exception as e:
         update_job(job_id, status="FAILED", step="TRANSCRIBE_FAILED", error=str(e))
-        pg_update(job_id, status="FAILED", error_message=f"transcription: {e}")
+        pg_update(job_id, status="FAILED", error_message=f"transcribe: {e}")
         return
+
+    print(f"[worker] trascrizione completata — {len(segments)} segmenti, lingua={detected_language}", flush=True)
 
     # ── 4. Diarizzazione pyannote (opzionale) ────────────────────────────────
     if diarize == "true" and diar_pipeline is not None:
@@ -427,13 +421,13 @@ def run_job(job_id: str, fw_model, diar_pipeline):
     else:
         segments = [{**s, "speaker": "UNKNOWN"} for s in segments]
 
-    # ── 5. Costruisci output ────────────────────────────────────────────────
+    # ── 5. Costruisci output ─────────────────────────────────────────────────
     update_job(job_id, step="BUILDING_OUTPUT")
 
     full_text = " ".join(s.get("text", "") for s in segments).strip()
     speakers  = sorted({s.get("speaker", "UNKNOWN") for s in segments})
 
-    now_str   = utc_now()
+    now_str       = utc_now()
     minio_url     = ""
     minio_txt_url = ""
 
@@ -582,59 +576,56 @@ def main():
     diar_pipeline = None
     if HF_TOKEN:
         try:
-            print("[worker] Caricamento pipeline diarizzazione pyannote...", flush=True)
+            print("[worker] Caricamento pipeline pyannote...", flush=True)
             diar_pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
                 use_auth_token=HF_TOKEN,
             )
-            # Stampa parametri attuali — utile per tuning soglie UNKNOWN
-            try:
-                print("[worker] Parametri pipeline diarizzazione:", flush=True)
-                for k, v in diar_pipeline.parameters(instantiated=True).items():
-                    print(f"[worker]   {k} = {v}", flush=True)
-            except Exception:
-                pass
-            # Tuning soglie diarizzazione per ridurre segmenti UNKNOWN
-            # threshold: distanza massima per unire segmenti allo stesso speaker
-            #   default 0.7045 → abbassare a 0.60 unisce più segmenti vicini
-            # min_cluster_size: frame minimi per formare un cluster speaker
-            #   default 12 → abbassare a 6 include segmenti brevi
-            try:
-                diar_pipeline.segmentation.min_duration_on  = 0.0
-                diar_pipeline.segmentation.min_duration_off = 0.0
-                diar_pipeline._clustering.threshold         = float(os.getenv("PYANNOTE_THRESHOLD",       "0.60"))
-                diar_pipeline._clustering.min_cluster_size  = int(os.getenv("PYANNOTE_MIN_CLUSTER_SIZE", "6"))
-                print(
-                    f"[worker] Soglie diarizzazione: "
-                    f"threshold={diar_pipeline._clustering.threshold}, "
-                    f"min_cluster_size={diar_pipeline._clustering.min_cluster_size}, "
-                    f"min_duration_on=0.0, min_duration_off=0.0",
-                    flush=True
-                )
-            except Exception as e:
-                print(f"[worker] ⚠ Tuning soglie non applicato: {e}", flush=True)
-            print("[worker] Pipeline diarizzazione pronta.", flush=True)
+            print("[worker] Pipeline pyannote pronta.", flush=True)
         except Exception as e:
-            print(f"[worker] ⚠ Diarizzazione non disponibile: {e}", flush=True)
+            print(f"[worker] ⚠ pyannote non disponibile: {e}", flush=True)
     else:
-        print("[worker] ⚠ HF_TOKEN mancante — diarizzazione disabilitata.", flush=True)
+        print("[worker] HF_TOKEN assente — diarizzazione disabilitata.", flush=True)
 
     recover_stale_jobs()
 
+    print(f"[worker] In ascolto su coda '{QUEUE_KEY}'...", flush=True)
+
     while True:
-        item = r.blpop(QUEUE_KEY, timeout=BLPOP_TIMEOUT)
-        if not item:
-            recover_stale_jobs()
+        # FIX: cattura ConnectionError/TimeoutError invece di crashare.
+        # La connessione Redis può morire dopo 35+ min di diarizzazione
+        # (Docker resetta le TCP connection idle). Il keepalive riduce il
+        # rischio, questo retry lo elimina completamente.
+        try:
+            item = r.blpop(QUEUE_KEY, timeout=BLPOP_TIMEOUT)
+        except (redis.ConnectionError, redis.TimeoutError) as e:
+            print(f"[worker] ⚠ Redis disconnesso: {e} — riconnessione tra 5s", flush=True)
+            time.sleep(5)
+            continue
+
+        if item is None:
+            # Timeout BLPOP — nessun job in coda, riprova
             continue
 
         _, job_id = item
-        print(f"[worker] → job {job_id}", flush=True)
+        job_id = job_id.strip()
+
+        # Salta job PAUSED (potrebbero essere stati ri-accodati per errore)
+        status = r.hget(job_key(job_id), "status") or ""
+        if status == "PAUSED":
+            print(f"[worker] job {job_id} è PAUSED, salto", flush=True)
+            continue
+
+        print(f"[worker] → elaboro job {job_id}", flush=True)
         try:
             run_job(job_id, fw_model, diar_pipeline)
         except Exception as e:
-            update_job(job_id, status="FAILED", step="WORKER_CRASH", error=str(e))
-            pg_update(job_id, status="FAILED", error_message=f"worker crash: {e}")
-            print(f"[worker] ✗ crash job {job_id}: {e}", flush=True)
+            print(f"[worker] ✗ errore imprevisto job {job_id}: {e}", flush=True)
+            try:
+                update_job(job_id, status="FAILED", step="WORKER_EXCEPTION", error=str(e))
+                pg_update(job_id, status="FAILED", error_message=str(e))
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

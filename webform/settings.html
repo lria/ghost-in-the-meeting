@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Minute — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <header>
+    <a href="index.html" class="logo">
+      <div class="logo-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>
+        </svg>
+      </div>
+      Minute
+    </a>
+    <nav class="top-nav">
+      <a href="index.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Trascrizione</span>
+      </a>
+      <a href="history.html" class="nav-link">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Storico</span>
+      </a>
+      <a href="settings.html" class="nav-link active">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </a>
+    </nav>
+  </header>
+
+  <main class="page-main" style="max-width:860px">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:4px 0 4px">
+      <div>
+        <div class="page-title">Settings</div>
+        <div class="page-subtitle">Configurazione dei servizi — salvata in localStorage</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="btn-secondary" id="test-all-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Testa connessioni
+        </button>
+        <button class="btn-accent" id="save-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Salva
+        </button>
+      </div>
+    </div>
+
+    <div id="save-feedback-bar" style="display:none;padding:10px 14px;background:var(--success-light);border:1px solid #bbf7d0;border-radius:var(--radius);font-size:12px;font-weight:500;color:var(--success);display:none;align-items:center;gap:7px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      Impostazioni salvate
+    </div>
+
+    <!-- Endpoints -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span class="panel-title">Endpoint servizi</span>
+        <span class="panel-subtitle">URL di base per ogni servizio</span>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+          Trascrizione
+        </div>
+        <div class="settings-grid">
+          <div class="field-group">
+            <label>WhisperX API <span id="dot-whisperx" class="dot" style="margin-left:4px;vertical-align:middle"></span></label>
+            <input type="url" id="cfg-whisperx" placeholder="http://localhost:9200" />
+            <div class="hint">API trascrizione (porta 9200)</div>
+          </div>
+          <div class="field-group">
+            <label>SSE Broker <span id="dot-sse" class="dot" style="margin-left:4px;vertical-align:middle"></span></label>
+            <input type="url" id="cfg-sse" placeholder="http://localhost:9400" />
+            <div class="hint">Broker eventi real-time (porta 9400)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Minute
+        </div>
+        <div class="settings-grid">
+          <div class="settings-row">
+            <div class="field-group">
+              <label>Minutes API <span id="dot-minutes" class="dot" style="margin-left:4px;vertical-align:middle"></span></label>
+              <input type="url" id="cfg-minutes" placeholder="http://localhost:9600" />
+              <div class="hint">API generazione minute (porta 9600)</div>
+            </div>
+            <div class="field-group">
+              <label>Ollama <span id="dot-ollama" class="dot" style="margin-left:4px;vertical-align:middle"></span></label>
+              <input type="url" id="cfg-ollama" placeholder="http://localhost:11434" />
+              <div class="hint">LLM locale (porta 11434)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Workflow
+        </div>
+        <div class="settings-grid">
+          <div class="field-group">
+            <label>n8n Webhook ingest <span id="dot-n8n" class="dot" style="margin-left:4px;vertical-align:middle"></span></label>
+            <input type="url" id="cfg-n8n" placeholder="http://localhost:5678/webhook/minute/ingest" />
+            <div class="hint">Webhook n8n per invio job (porta 5678)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Storage -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        <span class="panel-title">Storage — MinIO</span>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-grid">
+          <div class="settings-row">
+            <div class="field-group">
+              <label>MinIO Endpoint <span id="dot-minio" class="dot" style="margin-left:4px;vertical-align:middle"></span></label>
+              <input type="url" id="cfg-minio-endpoint" placeholder="http://localhost:9000" />
+            </div>
+            <div class="field-group">
+              <label>Bucket trascrizioni</label>
+              <input type="text" id="cfg-minio-bucket-tx" placeholder="wx-transcriptions" />
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="field-group">
+              <label>Access Key</label>
+              <input type="text" id="cfg-minio-key" placeholder="minioadmin" />
+            </div>
+            <div class="field-group">
+              <label>Secret Key</label>
+              <div class="input-with-action">
+                <input type="password" id="cfg-minio-secret" placeholder="••••••••" />
+                <button class="input-eye-btn" data-target="cfg-minio-secret" type="button">
+                  <svg class="eye-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>Bucket minute</label>
+            <input type="text" id="cfg-minio-bucket-min" placeholder="minutes" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Database -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="4" rx="1"/><rect x="2" y="9" width="20" height="4" rx="1"/><rect x="2" y="15" width="20" height="4" rx="1"/></svg>
+        <span class="panel-title">Database — PostgreSQL</span>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-grid">
+          <div class="settings-row">
+            <div class="field-group">
+              <label>Host</label>
+              <input type="text" id="cfg-pg-host" placeholder="localhost" />
+            </div>
+            <div class="field-group">
+              <label>Porta</label>
+              <input type="number" id="cfg-pg-port" placeholder="5432" />
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="field-group">
+              <label>Database</label>
+              <input type="text" id="cfg-pg-db" placeholder="n8n" />
+            </div>
+            <div class="field-group">
+              <label>Utente</label>
+              <input type="text" id="cfg-pg-user" placeholder="n8n" />
+            </div>
+          </div>
+          <div class="field-group">
+            <label>Password</label>
+            <div class="input-with-action">
+              <input type="password" id="cfg-pg-pass" placeholder="••••••••" />
+              <button class="input-eye-btn" data-target="cfg-pg-pass" type="button">
+                <svg class="eye-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HuggingFace + misc -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span class="panel-title">Credenziali</span>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          HuggingFace
+        </div>
+        <div class="settings-grid">
+          <div class="field-group">
+            <label>HF Token</label>
+            <div class="input-with-action">
+              <input type="password" id="cfg-hf-token" placeholder="hf_••••••••••••••••••••••" />
+              <button class="input-eye-btn" data-target="cfg-hf-token" type="button">
+                <svg class="eye-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <div class="hint">Necessario per scaricare i modelli pyannote — <a href="https://huggingface.co/settings/tokens" target="_blank" style="color:var(--accent)">genera token</a></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h4l5-5V2z"/></svg>
+          n8n
+        </div>
+        <div class="settings-grid">
+          <div class="settings-row">
+            <div class="field-group">
+              <label>Utente basic auth</label>
+              <input type="text" id="cfg-n8n-user" placeholder="admin" />
+            </div>
+            <div class="field-group">
+              <label>Password basic auth</label>
+              <div class="input-with-action">
+                <input type="password" id="cfg-n8n-pass" placeholder="••••••••" />
+                <button class="input-eye-btn" data-target="cfg-n8n-pass" type="button">
+                  <svg class="eye-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Whisper model config -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <span class="panel-title">Modello Whisper</span>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-grid">
+          <div class="settings-row">
+            <div class="field-group">
+              <label>Modello</label>
+              <select id="cfg-whisper-model">
+                <option value="tiny">tiny (~75 MB)</option>
+                <option value="base">base (~145 MB)</option>
+                <option value="small" selected>small (~244 MB) — default</option>
+                <option value="medium">medium (~769 MB)</option>
+                <option value="large-v3">large-v3 (~1.5 GB)</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label>Compute type</label>
+              <select id="cfg-whisper-compute">
+                <option value="int8" selected>int8 — CPU ARM64</option>
+                <option value="int8_float16">int8_float16</option>
+                <option value="float16">float16</option>
+                <option value="float32">float32</option>
+              </select>
+            </div>
+          </div>
+          <div class="hint">Modificare il modello richiede il restart del container <code style="font-family:'DM Mono',monospace;font-size:11px;background:var(--surface-2);padding:1px 5px;border-radius:3px">whisperx_worker</code></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  const DEFAULTS = {
+    'cfg-whisperx':        'http://localhost:9200',
+    'cfg-sse':             'http://localhost:9400',
+    'cfg-minutes':         'http://localhost:9600',
+    'cfg-ollama':          'http://localhost:11434',
+    'cfg-n8n':             'http://localhost:5678/webhook/minute/ingest',
+    'cfg-minio-endpoint':  'http://localhost:9000',
+    'cfg-minio-bucket-tx': 'wx-transcriptions',
+    'cfg-minio-bucket-min':'minutes',
+    'cfg-minio-key':       'minioadmin',
+    'cfg-minio-secret':    '',
+    'cfg-pg-host':         'localhost',
+    'cfg-pg-port':         '5432',
+    'cfg-pg-db':           'n8n',
+    'cfg-pg-user':         'n8n',
+    'cfg-pg-pass':         '',
+    'cfg-hf-token':        '',
+    'cfg-n8n-user':        'admin',
+    'cfg-n8n-pass':        '',
+    'cfg-whisper-model':   'small',
+    'cfg-whisper-compute': 'int8',
+  };
+
+  const HEALTH_MAP = [
+    { dotId:'dot-whisperx', cfgId:'cfg-whisperx',  path:'/health' },
+    { dotId:'dot-sse',      cfgId:'cfg-sse',        path:'/health' },
+    { dotId:'dot-minutes',  cfgId:'cfg-minutes',    path:'/health' },
+    { dotId:'dot-ollama',   cfgId:'cfg-ollama',     path:'/api/tags' },
+    { dotId:'dot-n8n',      cfgId:'cfg-n8n',        path:'' },          // n8n webhook — skip test
+    { dotId:'dot-minio',    cfgId:'cfg-minio-endpoint', path:'/minio/health/live' },
+  ];
+
+  const $ = id => document.getElementById(id);
+
+  // Load from localStorage
+  function loadSettings() {
+    const saved = JSON.parse(localStorage.getItem('gitm_settings') || '{}');
+    for (const [id, def] of Object.entries(DEFAULTS)) {
+      const el = $(id); if (!el) continue;
+      el.value = saved[id] !== undefined ? saved[id] : def;
+    }
+  }
+
+  // Save to localStorage
+  function saveSettings() {
+    const cfg = {};
+    for (const id of Object.keys(DEFAULTS)) {
+      const el = $(id); if (!el) continue;
+      cfg[id] = el.value;
+    }
+    localStorage.setItem('gitm_settings', JSON.stringify(cfg));
+    const bar = $('save-feedback-bar');
+    bar.style.display='flex';
+    setTimeout(() => bar.style.display='none', 2400);
+  }
+
+  // Eye toggle
+  document.querySelectorAll('.input-eye-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = $(btn.dataset.target);
+      const isPass = input.type === 'password';
+      input.type = isPass ? 'text' : 'password';
+      // swap icon
+      btn.querySelector('.eye-icon').outerHTML = isPass
+        ? `<svg class="eye-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+        : `<svg class="eye-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    });
+  });
+
+  // Health check
+  async function testAll() {
+    const btn = $('test-all-btn');
+    btn.disabled = true; btn.textContent = 'Verifica…';
+    await Promise.all(HEALTH_MAP.map(async ({dotId, cfgId, path}) => {
+      if (!path) return; // skip webhook
+      const dot = $(dotId); if (!dot) return;
+      dot.className = 'dot'; dot.style.animation='pulse-dot 0.8s infinite';
+      const base = ($(cfgId)?.value || '').replace(/\/+$/,'');
+      try {
+        const r = await fetch(base + path, {signal: AbortSignal.timeout(4000)});
+        dot.className = r.ok ? 'dot live' : 'dot';
+      } catch {
+        dot.className = 'dot';
+      }
+      dot.style.animation = '';
+    }));
+    btn.disabled = false; btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Testa connessioni`;
+  }
+
+  $('save-btn').addEventListener('click', saveSettings);
+  $('test-all-btn').addEventListener('click', testAll);
+
+  // Ctrl+S / Cmd+S
+  document.addEventListener('keydown', e => { if((e.ctrlKey||e.metaKey) && e.key==='s'){e.preventDefault();saveSettings();} });
+
+  loadSettings();
+  // Auto-test on load (silent — just dots)
+  setTimeout(() => testAll(), 800);
+</script>
+</body>
+</html>

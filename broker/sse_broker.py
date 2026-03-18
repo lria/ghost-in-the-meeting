@@ -78,6 +78,7 @@ async def fetch_job(r: aioredis.Redis, job_id: str) -> dict | None:
         "updated_at":    data.get("updated_at", ""),
         "output_json_url": data.get("output_json_url", ""),
         "output_txt_url":  data.get("output_txt_url", ""),
+        "audio_url":       data.get("audio_url", ""),
         "error":           data.get("error", ""),
     }
 

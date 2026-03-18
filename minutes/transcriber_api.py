@@ -20,6 +20,7 @@ import threading
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 import redis
@@ -117,6 +118,19 @@ def utc_now() -> str:
 def job_key(job_id: str) -> str:
     return f"wx:job:{job_id}"
 
+def _parse_minio_url(url: str) -> tuple[str, str]:
+    """
+    Estrae (bucket, key) da un URL MinIO pubblico o interno.
+    Funziona indipendentemente da localhost:9000 vs minio:9000.
+    http://localhost:9000/wx-transcriptions/Acme/Q1/result.json
+    -> ('wx-transcriptions', 'Acme/Q1/result.json')
+    """
+    parsed = urlparse(url)
+    path_parts = parsed.path.lstrip("/").split("/", 1)
+    if len(path_parts) != 2 or not path_parts[0] or not path_parts[1]:
+        raise ValueError(f"URL MinIO non valido (atteso /bucket/key): {url}")
+    return path_parts[0], path_parts[1]
+
 
 # ── Qdrant init ───────────────────────────────────────────────────────────────
 
@@ -152,11 +166,9 @@ def get_job_speakers_from_redis(job_id: str) -> list[str]:
     output_json_url = job.get("output_json_url", "")
     if not output_json_url:
         return []
-    # Estrai bucket e key dall'URL
-    # URL format: http://minio:9000/bucket/key
+    # Estrai bucket e key dall'URL (funziona con localhost:9000 e minio:9000)
     try:
-        parts = output_json_url.replace(MINIO_ENDPOINT.rstrip("/") + "/", "").split("/", 1)
-        bucket, key = parts[0], parts[1]
+        bucket, key = _parse_minio_url(output_json_url)
         client = s3()
         obj = client.get_object(Bucket=bucket, Key=key)
         data = json.loads(obj["Body"].read())
@@ -178,8 +190,7 @@ def get_transcript_text(job_id: str) -> tuple[str, list[dict]]:
     if not output_json_url:
         return "", []
     try:
-        parts = output_json_url.replace(MINIO_ENDPOINT.rstrip("/") + "/", "").split("/", 1)
-        bucket, key = parts[0], parts[1]
+        bucket, key = _parse_minio_url(output_json_url)
         client = s3()
         obj = client.get_object(Bucket=bucket, Key=key)
         data = json.loads(obj["Body"].read())

@@ -23,6 +23,7 @@ import boto3
 import psycopg2
 import requests
 from botocore.exceptions import ClientError
+from urllib.parse import urlparse
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -267,19 +268,29 @@ def pg_update_minutes(minutes_id: str, **fields):
 
 # ── Fetch trascrizione ────────────────────────────────────────────────────────
 
+def _parse_minio_url(url: str) -> tuple[str, str]:
+    """
+    Estrae (bucket, key) da un URL MinIO pubblico o interno.
+    Funziona indipendentemente da localhost:9000 vs minio:9000.
+    """
+    parsed = urlparse(url)
+    path_parts = parsed.path.lstrip("/").split("/", 1)
+    if len(path_parts) != 2 or not path_parts[0] or not path_parts[1]:
+        raise ValueError(f"URL MinIO non valido (atteso /bucket/key): {url}")
+    return path_parts[0], path_parts[1]
+
+
 def fetch_transcript(job_id: str) -> Optional[dict]:
     s3 = s3_client()
     json_url = r.hget(f"wx:job:{job_id}", "output_json_url") or ""
 
     if json_url.startswith("http"):
-        parts = json_url.replace(MINIO_ENDPOINT.rstrip("/") + "/", "").split("/", 1)
-        if len(parts) == 2:
-            bucket, key = parts
-            try:
-                obj = s3.get_object(Bucket=bucket, Key=key)
-                return json.loads(obj["Body"].read())
-            except Exception as e:
-                print(f"[minutes_worker] fallback scan: {e}", flush=True)
+        try:
+            bucket, key = _parse_minio_url(json_url)
+            obj = s3.get_object(Bucket=bucket, Key=key)
+            return json.loads(obj["Body"].read())
+        except Exception as e:
+            print(f"[minutes_worker] fallback scan: {e}", flush=True)
 
     # Fallback scan
     customer = r.hget(f"wx:job:{job_id}", "customer") or ""
@@ -293,6 +304,31 @@ def fetch_transcript(job_id: str) -> Optional[dict]:
                 data = s3.get_object(Bucket=MINIO_BUCKET, Key=key)
                 return json.loads(data["Body"].read())
     return None
+
+
+def get_speaker_aliases_as_participants(job_id: str) -> list[dict]:
+    """
+    Legge speaker_aliases da PG e li converte nel formato participants
+    [{speaker, name, role}] usato dal worker.
+    Sorgente di verità: sempre prioritaria su quanto passato dalla UI.
+    """
+    try:
+        with pg_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT speaker_id, name, company FROM speaker_aliases "
+                "WHERE job_id = %s ORDER BY speaker_id",
+                (job_id,)
+            )
+            rows = cur.fetchall()
+        if rows:
+            print(f"[minutes_worker] speaker_aliases da PG: {len(rows)} speaker per job {job_id[:8]}", flush=True)
+        return [
+            {"speaker": row[0], "name": row[1], "role": row[2] or ""}
+            for row in rows
+        ]
+    except Exception as e:
+        print(f"[minutes_worker] ⚠ get_speaker_aliases warning: {e}", flush=True)
+        return []
 
 
 # ── Speaker mapping ───────────────────────────────────────────────────────────
@@ -600,6 +636,18 @@ def run_job(minutes_id: str):
         participants = json.loads(participants_raw)
     except Exception:
         participants = []
+
+    # ── Sorgente di verità: speaker_aliases su PG ────────────────────────────
+    # I participants passati dalla UI possono essere vuoti o stale (bug porto 9200).
+    # Leggiamo sempre da speaker_aliases che è scritto da transcriber_api al salvataggio.
+    db_participants = get_speaker_aliases_as_participants(job_id)
+    if db_participants:
+        participants = db_participants
+        print(f"[minutes_worker] uso speaker_aliases da PG ({len(participants)} speaker)", flush=True)
+    elif participants:
+        print(f"[minutes_worker] uso participants da Redis ({len(participants)} speaker)", flush=True)
+    else:
+        print(f"[minutes_worker] ⚠ nessun speaker mapping disponibile per job {job_id[:8]}", flush=True)
 
     # Speaker names per filtro RAG
     speaker_names = [
