@@ -8,95 +8,64 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <style>
-    /* ── Full-height layout — sovrascrive style.css ── */
-
-    html, body {
-      height: 100% !important;
-      overflow: hidden !important;
-    }
+    /* ── Full-height layout ── */
+    html, body { height: 100% !important; overflow: hidden !important; }
     .app-shell {
-      height: 100vh !important;
-      min-height: unset !important;
-      overflow: hidden !important;
-      display: flex !important;
-      flex-direction: column !important;
+      height: 100vh !important; min-height: unset !important;
+      overflow: hidden !important; display: flex !important; flex-direction: column !important;
     }
-    .page-header {
-      flex-shrink: 0;
-    }
-    main.page-main {
+    .page-header { flex-shrink: 0; }
+
+    /* main = grid 1fr 1fr, occupa tutto lo spazio rimanente */
+    main {
       flex: 1 !important;
       min-height: 0 !important;
       overflow: hidden !important;
-      display: flex !important;
-      flex-direction: column !important;
-      gap: 12px !important;
-      padding-bottom: 20px !important;
-    }
-    .info-box {
-      flex-shrink: 0;
-    }
-
-    /* Grid 2 colonne */
-    #speakers-grid {
-      flex: 1;
-      min-height: 0;
       display: grid !important;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      align-items: stretch;
-      overflow: hidden;
+      grid-template-columns: 1fr 1fr !important;
+      grid-template-rows: auto 1fr !important;
+      gap: 12px 20px !important;
+      padding: 20px 24px !important;
+      align-items: stretch !important;
+      width: 100% !important;
     }
 
-    /* Colonna sinistra */
+    /* info-box, loading, error → tutta la larghezza */
+    #loading-state { grid-column: 1 / -1; }
+    #error-state   { grid-column: 1 / -1; }
+    .info-box      { grid-column: 1 / -1; flex-shrink: 0; align-self: start; }
+
+    /* I due panel occupano la seconda riga del grid */
     #panel-speakers {
-      display: flex !important;
-      flex-direction: column !important;
-      overflow: hidden !important;
-      min-height: 0;
+      display: flex !important; flex-direction: column !important;
+      overflow: hidden !important; min-height: 0;
     }
     #panel-speakers .panel-body {
-      flex: 1 !important;
-      overflow-y: auto !important;
-      min-height: 0 !important;
+      flex: 1 !important; overflow-y: auto !important; min-height: 0 !important;
     }
-
-    /* Colonna destra */
     #panel-transcript {
-      position: static !important;
-      top: auto !important;
-      max-height: none !important;
-      display: flex !important;
-      flex-direction: column !important;
-      overflow: hidden !important;
-      min-height: 0;
+      position: static !important; max-height: none !important;
+      display: flex !important; flex-direction: column !important;
+      overflow: hidden !important; min-height: 0;
     }
-    #panel-transcript .panel-header {
-      flex-shrink: 0;
-    }
+    #panel-transcript .panel-header { flex-shrink: 0; }
     #transcript-body {
-      flex: 1 !important;
-      overflow-y: auto !important;
-      min-height: 0 !important;
-      max-height: none !important;
+      flex: 1 !important; overflow-y: auto !important;
+      min-height: 0 !important; max-height: none !important;
       padding: 16px 20px;
     }
 
-    /* Toggle visibilità #content senza rompere display:flex */
+    /* Nascondi panel finché non sono pronti */
     .content-hidden { display: none !important; }
-    #content {
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
 
     @media (max-width: 900px) {
-      html, body       { overflow: auto !important; }
-      .app-shell       { height: auto !important; overflow: visible !important; }
-      main.page-main   { flex: none !important; overflow: visible !important; min-height: unset !important; }
-      #speakers-grid   { grid-template-columns: 1fr; overflow: visible; height: auto; flex: none; }
+      html, body { overflow: auto !important; }
+      .app-shell { height: auto !important; overflow: visible !important; }
+      main {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: auto !important;
+        overflow: visible !important; height: auto !important; flex: none !important;
+      }
       #panel-speakers  { overflow: visible !important; }
       #panel-speakers .panel-body { overflow-y: visible !important; }
       #panel-transcript { height: 420px; overflow: hidden !important; }
@@ -241,7 +210,7 @@
     </div>
   </div>
 
-  <main class="page-main">
+  <main>
 
     <!-- Loading state -->
     <div id="loading-state" style="display:flex;align-items:center;justify-content:center;padding:60px;gap:12px">
@@ -257,23 +226,18 @@
       </div>
     </div>
 
-    <!-- Content -->
-    <div id="content" class="content-hidden">
-
-      <!-- Info box note -->
-      <div class="info-box">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <div class="info-box-text">
-          Il riconoscimento vocale di Whisper <strong>non ha memoria tra sessioni</strong>: ogni trascrizione produce nuovi label generici (SPEAKER_00, SPEAKER_01…).
-          Associa qui ogni speaker al nome reale — il mapping verrà usato per generare la minuta.
-          I nomi usati in precedenti sessioni dello stesso cliente appaiono come suggerimenti.
-        </div>
+    <!-- Info box → full width via grid-column: 1/-1 in CSS -->
+    <div class="info-box content-hidden" id="info-box">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div class="info-box-text">
+        Il riconoscimento vocale di Whisper <strong>non ha memoria tra sessioni</strong>: ogni trascrizione produce nuovi label generici (SPEAKER_00, SPEAKER_01…).
+        Associa qui ogni speaker al nome reale — il mapping verrà usato per generare la minuta.
+        I nomi usati in precedenti sessioni dello stesso cliente appaiono come suggerimenti.
       </div>
+    </div>
 
-      <div id="speakers-grid">
-
-        <!-- LEFT: Speaker cards -->
-        <div class="panel" id="panel-speakers">
+    <!-- LEFT: Speaker cards -->
+    <div class="panel content-hidden" id="panel-speakers">
           <div class="panel-header">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <span class="panel-title">Speaker Rilevati</span>
@@ -282,8 +246,8 @@
           <div class="panel-body" id="speakers-container"></div>
         </div>
 
-        <!-- RIGHT: Annotated transcript -->
-        <div class="panel" id="panel-transcript">
+    <!-- RIGHT: Annotated transcript -->
+    <div class="panel content-hidden" id="panel-transcript">
           <div class="panel-header">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             <span class="panel-title">Trascrizione Annotata</span>
@@ -294,9 +258,6 @@
             <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:12px">Trascrizione non disponibile</div>
           </div>
         </div>
-
-      </div>
-    </div>
 
   </main>
 </div>
@@ -352,7 +313,9 @@
 
       renderSpeakers(data);
       showLoading(false);
-      document.getElementById('content').classList.remove('content-hidden');
+      document.getElementById('info-box').classList.remove('content-hidden');
+      document.getElementById('panel-speakers').classList.remove('content-hidden');
+      document.getElementById('panel-transcript').classList.remove('content-hidden');
     } catch(e) {
       showLoading(false);
       showError(`Impossibile caricare i dati del job: ${e.message}`);
