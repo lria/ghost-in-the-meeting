@@ -1,984 +1,636 @@
 # 👻 Ghost in the Meeting
 
-Pipeline self-hosted e asincrona per trascrivere, diarizzare e trasformare in minuta le registrazioni audio di riunioni. Costruita su Apple Silicon (M3 Pro) con Docker. Funziona interamente in locale, senza cloud.
+> *Il fantasma che vuoi davvero nelle tue riunioni.*
+
+> **Configurazione rapida:** tutti i parametri dell'applicazione (URL dei servizi, modelli, template di default, lingua, ecc.) si possono impostare direttamente dall'interfaccia web. Aprire `http://localhost:8081` e navigare alla sezione **Settings** nel menu principale per accedere al pannello di configurazione completo senza modificare file o variabili d'ambiente.
+
+Un sistema self-hosted, completamente locale e asincrono per trascrivere audio di riunioni, identificare i parlanti e generare verbali strutturati tramite intelligenza artificiale — senza inviare dati a servizi cloud.
 
 ---
 
-## Stack
+## Indice
 
-| Servizio | Ruolo |
+1. [Finalità del progetto](#finalità-del-progetto)
+2. [Prerequisiti](#prerequisiti)
+3. [Installazione passo dopo passo](#installazione-passo-dopo-passo)
+4. [Moduli funzionali e mapping Docker](#moduli-funzionali-e-mapping-docker)
+5. [Guida alle pagine web](#guida-alle-pagine-web)
+   - [Pagina Trascrizione](#pagina-trascrizione)
+   - [Pagina Associazione Speaker](#pagina-associazione-speaker)
+   - [Pagina Generazione Minuta](#pagina-generazione-minuta)
+6. [Installare nuovi template](#installare-nuovi-template)
+7. [Installare nuovi modelli con Ollama](#installare-nuovi-modelli-con-ollama)
+8. [Riferimento API](#riferimento-api)
+9. [Comandi utili](#comandi-utili)
+10. [Performance](#performance)
+11. [Roadmap](#roadmap)
+
+---
+
+## Finalità del progetto
+
+**Ghost in the Meeting** risolve un problema pratico e frequente: le riunioni aziendali producono informazioni preziose che si perdono senza una documentazione accurata. Trascrivere manualmente è lento, delegare a servizi cloud espone dati sensibili.
+
+Il progetto offre una pipeline completamente locale che:
+
+- **Trascrive** audio di riunioni in italiano e inglese usando [faster-whisper](https://github.com/SYSTRAN/faster-whisper), un'implementazione ottimizzata di OpenAI Whisper
+- **Diarizza i parlanti** tramite [pyannote.audio](https://github.com/pyannote/pyannote-audio), distinguendo automaticamente chi sta parlando e quando
+- **Rinomina i parlanti** permettendo di associare etichette anonime (`SPEAKER_00`, `SPEAKER_01`) ai nomi reali dei partecipanti
+- **Genera verbali** in formato strutturato usando un LLM locale (Ollama) con RAG (Retrieval-Augmented Generation) su Qdrant, applicando template personalizzabili
+- **Archivia tutto** su MinIO (object storage locale compatibile S3) con path organizzati per cliente e progetto
+
+Il sistema è progettato per **Apple Silicon (M1/M2/M3)** e funziona interamente su Docker, senza richiedere GPU.
+
+---
+
+## Prerequisiti
+
+| Requisito | Dettaglio |
 |---|---|
-| **faster-whisper** | Speech-to-text (word timestamps + VAD) |
-| **pyannote.audio** | Speaker diarization |
-| **n8n** | Workflow orchestration (ingest webhook) |
-| **PostgreSQL** | Job tracking e metadata persistente |
-| **Redis** | Coda FIFO e stato dei job in tempo reale |
-| **MinIO** | Storage oggetti (audio, JSON, TXT, minute .md) |
-| **SSE Broker** | Push real-time eventi job al browser |
-| **Qdrant** | Vector store per RAG sulle trascrizioni |
-| **Ollama** | LLM locale per generazione minuta |
-| **nginx** | Serve la Web UI statica |
+| **Docker Desktop** | Versione recente per Mac Apple Silicon |
+| **RAM assegnata a Docker** | Minimo **10 GB** (Impostazioni → Risorse → Memoria) |
+| **Account HuggingFace** | Necessario per scaricare i modelli di diarizzazione |
+| **Token HuggingFace** | Con licenza accettata per i modelli pyannote (vedi sotto) |
+
+### Accettare le licenze HuggingFace
+
+Prima di avviare lo stack, accedere a HuggingFace e accettare i termini per:
+
+- [`pyannote/speaker-diarization-3.1`](https://huggingface.co/pyannote/speaker-diarization-3.1)
+- [`pyannote/segmentation-3.0`](https://huggingface.co/pyannote/segmentation-3.0)
+
+Poi generare un token su [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) e annotarlo: servirà nel file `.env`.
 
 ---
 
-## Porte
+## Installazione passo dopo passo
 
-| Servizio | Porta | URL |
-|---|---|---|
-| Web UI | 8081 | http://localhost:8081 |
-| n8n | 5678 | http://localhost:5678 |
-| WhisperX API | 9200 | http://localhost:9200 |
-| Transcriber API | 9500 | http://localhost:9500 |
-| Minutes API | 9600 | http://localhost:9600 |
-| SSE Broker | 9400 | http://localhost:9400 |
-| MinIO API | 9000 | http://localhost:9000 |
-| MinIO Console | 9001 | http://localhost:9001 |
-| Ollama | 11434 | http://localhost:11434 |
-| Qdrant REST | 6333 | http://localhost:6333 |
-
----
-
-## Architettura completa
-
-```
-Browser (http://localhost:8081)
-    │
-    ├── index.html      — Upload audio + live status SSE + storico
-    ├── speakers.html   — Associa SPEAKER_XX → nome reale
-    ├── minutes.html    — Genera/visualizza minuta AI
-    ├── history.html    — Storico trascrizioni dettagliato
-    └── settings.html   — Configurazione
-    │
-    ▼ upload
-n8n (5678) — POST /webhook/minute/ingest
-    │         valida e forwarda a whisperx_api
-    │
-    ▼
-whisperx_api (9200)          — FastAPI
-    │  POST /jobs             → salva audio su disco, accoda su Redis
-    │  GET  /jobs/:id         → polling stato + URL output
-    │  POST /jobs/:id/pause   → setta stop_requested=1
-    │  POST /jobs/:id/resume  → re-accoda job PAUSED
-    │  POST /jobs/:id/retry   → re-accoda job FAILED
-    │  DELETE /jobs/:id       → elimina risorse (4 scope)
-    │  GET  /queue-stats      → snapshot coda
-    │
-    ▼ wx:queue (Redis FIFO)
-    │
-whisperx_worker
-    ├── ffmpeg           → WAV 16kHz mono
-    ├── faster-whisper   → trascrizione (word timestamps)
-    ├── pyannote         → diarizzazione speaker (opzionale)
-    ├── merge            → assegna speaker a ogni segmento
-    └── MinIO upload     → result.json, result.txt, audio_original
-         │
-         ▼ rag:queue
-    rag_indexer          → chunking + embedding (nomic-embed-text) + upsert Qdrant
-    │
-whisperx_cleanup (ogni ora) → elimina file temporanei su disco
-
-sse_broker (9400)        — FastAPI
-    └── poll Redis ogni 2s → push SSE al browser
-
-transcriber_api (9500)   — FastAPI
-    │  GET  /jobs/:id/speakers        → speaker rilevati + alias esistenti + suggerimenti
-    │  POST /jobs/:id/speakers        → salva mapping speaker→nome in speaker_aliases
-    │  GET  /jobs/:id/transcript-url  → URL pubblico del result.json su MinIO
-
-minutes_api (9600)       — FastAPI
-    │  POST /minutes/jobs             → crea job generazione minuta
-    │  GET  /minutes/jobs/:id         → polling stato + preview
-    │  GET  /minutes/jobs             → lista minute (filtro per job_id o customer)
-    │  POST /minutes/jobs/:id/retry   → re-accoda job FAILED
-    │  DELETE /minutes/jobs/:id       → elimina job da Redis e PG
-    │  GET  /minutes/templates        → lista template disponibili
-    │  GET  /minutes/models           → modelli Ollama disponibili
-    │  POST /minutes/models/pull      → scarica un modello su Ollama
-    │
-    ▼ minutes:queue (Redis)
-    │
-minutes_worker
-    ├── fetch_transcript  → scarica result.json da MinIO
-    ├── speaker_aliases   → legge mapping da PG (sorgente di verità)
-    ├── RAG retrieval     → Qdrant (se context_level != standalone)
-    ├── build_prompt      → carica template + sostituisce variabili
-    ├── Ollama generate   → streaming, aggiorna Redis ogni 100 token
-    └── MinIO upload      → minuta .md nel bucket "minutes"
-```
-
----
-
-## Requisiti
-
-- Docker Desktop for Mac (Apple Silicon M1/M2/M3)
-- Docker Desktop RAM: almeno **10 GB** (Settings → Resources)
-- Account HuggingFace con licenza accettata per:
-  - [`pyannote/speaker-diarization-3.1`](https://huggingface.co/pyannote/speaker-diarization-3.1)
-  - [`pyannote/segmentation-3.0`](https://huggingface.co/pyannote/segmentation-3.0)
-
----
-
-## Setup completo — Prima installazione
-
-### 1. Clone e configurazione
+### Passo 1 — Clonare il repository
 
 ```bash
 git clone https://github.com/lria/ghost-in-the-meeting
 cd ghost-in-the-meeting
+```
+
+### Passo 2 — Creare e configurare il file `.env`
+
+```bash
 cp .env.example .env
 ```
 
-Edita `.env` con i tuoi valori:
+Aprire `.env` con un editor e compilare tutte le variabili:
 
-```env
+```dotenv
+# ── PostgreSQL ──────────────────────────────────────────────
 POSTGRES_USER=n8n
-POSTGRES_PASSWORD=una_password_sicura
+POSTGRES_PASSWORD=scegli_una_password_sicura
 POSTGRES_DB=n8n
 
+# ── MinIO (object storage) ──────────────────────────────────
 MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=una_password_sicura
+MINIO_ROOT_PASSWORD=scegli_una_password_sicura
 
+# ── n8n (orchestrazione workflow) ──────────────────────────
 N8N_BASIC_AUTH_USER=admin
-N8N_BASIC_AUTH_PASSWORD=una_password_sicura
-N8N_ENCRYPTION_KEY=chiave_32_caratteri_esatti
+N8N_BASIC_AUTH_PASSWORD=scegli_una_password_sicura
+N8N_ENCRYPTION_KEY=una_chiave_di_32_caratteri_esatti
 
+# ── HuggingFace (modelli pyannote) ─────────────────────────
 HF_TOKEN=hf_il_tuo_token_huggingface
+
+# ── Timezone ────────────────────────────────────────────────
 TZ=Europe/Rome
 ```
 
-### 2. Avvio dello stack
+> **Nota su `N8N_ENCRYPTION_KEY`**: deve essere esattamente 32 caratteri. Generarne uno con:
+> ```bash
+> openssl rand -hex 16
+> ```
+
+### Passo 3 — Avviare lo stack Docker
 
 ```bash
 docker compose up -d
 ```
 
-Il primo avvio scarica i modelli Whisper e pyannote (~10 minuti). Verifica il progresso:
+Il primo avvio richiede **circa 10 minuti**: Docker scarica le immagini base, compila i layer Python, e il worker WhisperX scarica i modelli faster-whisper e pyannote da HuggingFace (~2–4 GB totali).
+
+Per monitorare il progresso:
 
 ```bash
 docker logs n8n_whisperx_worker --follow
 ```
 
-Attendi il messaggio `[worker] Pipeline pyannote pronta.` prima di inviare il primo job.
+Lo stack è pronto quando il worker stampa `Worker ready. Waiting for jobs...`.
 
-### 3. Configurazione MinIO
+### Passo 4 — Migrazioni del database
 
-Rendi il bucket pubblico in lettura (necessario per accedere ai file dal browser):
+> **Prima installazione:** questo passo **non è necessario**. La directory `postgres_init/` è montata come `docker-entrypoint-initdb.d` nel container PostgreSQL, quindi tutti gli script SQL vengono eseguiti automaticamente da Docker al primo avvio (quando il volume dati è vuoto).
+>
+> **Aggiornamento da installazione esistente:** se il database è già stato inizializzato in precedenza e mancano gli stati `PAUSED` o `DELETED`, applicare manualmente solo le migrazioni mancanti:
+>
+> ```bash
+> docker exec -i n8n_stack_postgres psql -U n8n -d n8n \
+>   < postgres_init/003_add_paused_status.sql
+>
+> docker exec -i n8n_stack_postgres psql -U n8n -d n8n \
+>   < postgres_init/004_add_deleted_status.sql
+> ```
+
+### Passo 5 — Configurare MinIO (bucket pubblico)
+
+Il bucket `wx-transcriptions` deve essere accessibile in lettura anonima perché l'interfaccia web possa scaricare i risultati:
 
 ```bash
 docker exec n8n_stack_minio sh -c '
   mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD &&
-  mc anonymous set download local/wx-transcriptions
-'
-```
-
-Crea anche il bucket per le minute:
-
-```bash
-docker exec n8n_stack_minio sh -c '
-  mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD &&
-  mc mb local/minutes --ignore-existing &&
+  mc mb --ignore-existing local/wx-transcriptions &&
+  mc mb --ignore-existing local/minutes &&
+  mc anonymous set download local/wx-transcriptions &&
   mc anonymous set download local/minutes
 '
 ```
 
-### 4. Migrazioni database
+### Passo 6 — Installare il modello di embedding per RAG
 
-Le migrazioni sono eseguite automaticamente da Docker all'avvio tramite `postgres_init/`. Se aggiorni il progetto su un'installazione esistente, applica manualmente le migrazioni mancanti:
+> **Alternativa da UI:** i passi 6 e 7 possono essere eseguiti direttamente dalla pagina Generazione Minuta (`http://localhost:8081/minutes.html`) nella sezione di configurazione modelli, senza usare il terminale.
 
-```bash
-# Esegui tutte le migrazioni in ordine
-for f in postgres_init/*.sql; do
-  docker exec -i n8n_stack_postgres psql -U n8n -d n8n < "$f"
-done
-```
-
-### 5. Installazione modelli Ollama
-
-Almeno un modello è necessario per la generazione delle minute. Raccomandati:
+Il sistema usa `nomic-embed-text` per indicizzare le trascrizioni su Qdrant. Installarlo in Ollama:
 
 ```bash
-# Modello consigliato — buon equilibrio qualità/velocità su M3
-docker exec n8n_stack_ollama ollama pull mistral:7b
-
-# Alternativa più leggera (più veloce, meno preciso)
-docker exec n8n_stack_ollama ollama pull llama3.2:3b
-
-# Alternativa più potente (richiede più RAM)
-docker exec n8n_stack_ollama ollama pull llama3.1:8b
-
-# Modello embedding per il RAG (obbligatorio se si usa il contesto storico)
-docker exec n8n_stack_ollama ollama pull nomic-embed-text
+docker exec -it n8n_stack_ollama ollama pull nomic-embed-text
 ```
 
-Puoi anche scaricare modelli dalla Web UI: `minutes.html` → sezione "Modello LLM" → pulsante "Pull".
+### Passo 7 — Installare un modello LLM per la generazione dei verbali
 
-Verifica i modelli installati:
-```bash
-docker exec n8n_stack_ollama ollama list
-```
-
-### 6. Verifica che tutto sia attivo
+Installare almeno un modello di testo. Per iniziare, il consiglio è `mistral` (7B, buon equilibrio qualità/velocità su CPU):
 
 ```bash
-# Stato di tutti i container
-docker compose ps
-
-# Health check dei servizi principali
-curl http://localhost:9200/health   # whisperx_api
-curl http://localhost:9400/health   # sse_broker
-curl http://localhost:9500/health   # transcriber_api
-curl http://localhost:9600/health   # minutes_api
+docker exec -it n8n_stack_ollama ollama pull mistral
 ```
 
----
+### Passo 8 — Verificare che tutto sia attivo
 
-## Strutture dati e relazioni
+Aprire il browser su [http://localhost:8081](http://localhost:8081). La Web UI deve essere visibile.
 
-### PostgreSQL — Schema
-
-#### `wx_transcription_jobs` — Job principale di trascrizione
-```sql
-job_id            text PRIMARY KEY           -- uuid hex
-status            transcription_status        -- PENDING|WORKING|COMPLETED|FAILED|PAUSED|DELETED
-step              text                        -- step corrente (es. DIARIZING_42pct)
-customer          text                        -- nome cliente
-project           text                        -- nome progetto
-language          text DEFAULT 'it'           -- it | en | auto
-max_speakers      int  DEFAULT 8
-diarize           boolean DEFAULT true
-output_format     text DEFAULT 'both'         -- json | txt | both
-input_filename    text
-output_json_url   text                        -- URL MinIO result.json
-output_txt_url    text                        -- URL MinIO result.txt
-audio_url         text                        -- URL MinIO audio originale
-speakers_mapped   boolean DEFAULT false       -- true dopo che l'utente ha assegnato i nomi
-error_message     text
-created_at        timestamptz
-updated_at        timestamptz
-started_at        timestamptz
-finished_at       timestamptz
-```
-
-#### `speaker_aliases` — Mapping SPEAKER_XX → persona reale
-```sql
-id          serial PRIMARY KEY
-job_id      text REFERENCES wx_transcription_jobs(job_id) ON DELETE CASCADE
-speaker_id  text   -- es. SPEAKER_00, SPEAKER_01, UNKNOWN_0
-name        text   -- nome reale assegnato dall'utente
-company     text   -- azienda (opzionale)
-customer    text   -- denormalizzato per query per cliente
-created_at  timestamptz
-updated_at  timestamptz
-UNIQUE (job_id, speaker_id)
-```
-
-#### `rag_index_jobs` — Tracciamento indicizzazione Qdrant
-```sql
-id          serial PRIMARY KEY
-job_id      text REFERENCES wx_transcription_jobs(job_id) ON DELETE CASCADE UNIQUE
-status      transcription_status  -- PENDING|WORKING|COMPLETED|FAILED
-chunk_count int   -- numero di chunk indicizzati
-error_message text
-created_at  timestamptz
-updated_at  timestamptz
-finished_at timestamptz
-```
-
-#### `minutes_jobs` — Job di generazione minuta
-```sql
-minutes_id    text PRIMARY KEY   -- uuid hex
-job_id        text REFERENCES wx_transcription_jobs(job_id) ON DELETE CASCADE
-status        transcription_status
-step          text
-template      text               -- chiave del file template (es. standard)
-context_level text               -- standalone|customer|customer_project|speakers
-model         text               -- nome modello Ollama (es. mistral:7b)
-language      text DEFAULT 'it'
-customer      text               -- denormalizzato da wx_transcription_jobs
-project       text               -- denormalizzato da wx_transcription_jobs
-participants  text               -- JSON [{speaker, name, role}] — backup; PG è sorgente di verità
-output_url    text               -- URL MinIO file .md nel bucket "minutes"
-error_message text
-created_at    timestamptz
-updated_at    timestamptz
-started_at    timestamptz
-finished_at   timestamptz
-```
-
-### Relazioni tra tabelle
-
-```
-wx_transcription_jobs (1)
-    │
-    ├── (N) speaker_aliases        job_id FK → CASCADE DELETE
-    ├── (1) rag_index_jobs         job_id FK → CASCADE DELETE, UNIQUE
-    └── (N) minutes_jobs           job_id FK → CASCADE DELETE
-```
-
-### Redis — Strutture chiave
-
-**Job trascrizione** → hash `wx:job:{job_id}`
-```
-status          PENDING|WORKING|COMPLETED|FAILED|PAUSED|DELETED
-step            step corrente
-customer        nome cliente
-project         nome progetto
-language        it|en|auto
-diarize         true|false
-max_speakers    numero intero
-output_format   json|txt|both
-output_json_url URL MinIO result.json
-output_txt_url  URL MinIO result.txt
-audio_url       URL MinIO audio originale
-minutes_url     URL MinIO ultima minuta generata
-input_file      path locale del file audio
-stop_requested  0|1  (setta a 1 per pausare il worker)
-created_at      ISO timestamp
-updated_at      ISO timestamp
-```
-
-**Job minuta** → hash `minutes:job:{minutes_id}`
-```
-minutes_id      uuid hex
-job_id          riferimento al job trascrizione
-status          PENDING|WORKING|COMPLETED|FAILED
-step            step corrente (es. GENERATING_350tok)
-template        chiave template
-context_level   standalone|customer|customer_project|speakers
-model           nome modello Ollama
-language        it|en
-customer        nome cliente
-project         nome progetto
-participants    JSON array [{speaker, name, role}]
-output_url      URL MinIO file .md
-preview         primi 8000 chars della minuta (per preview rapida)
-created_at      ISO timestamp
-updated_at      ISO timestamp
-```
-
-**Code Redis:**
-```
-wx:queue        → lista job_id in attesa di trascrizione (FIFO)
-rag:queue       → lista job_id in attesa di indicizzazione Qdrant
-minutes:queue   → lista minutes_id in attesa di generazione
-```
-
-### MinIO — Struttura bucket
-
-**Bucket `wx-transcriptions`** — accesso pubblico read
-```
-{customer}/{project}/{YYYYMMDD_HHMMSS}_{job_id[:8]}/
-    ├── result.json          — trascrizione strutturata + speaker
-    ├── result.txt           — trascrizione leggibile con speaker e timestamp
-    └── audio_original.{ext} — file audio originale
-```
-
-**Bucket `minutes`** — accesso pubblico read
-```
-{customer}/{project}/{YYYY-MM-DD}_{job_id[:8]}/
-    └── {customer} - {project} - {YYYY-MM-DD}.md   — minuta generata
-```
-
-### Qdrant — Collection `transcriptions`
-
-Ogni punto rappresenta un chunk della trascrizione:
-```json
-{
-  "id": "<uint64>",
-  "vector": "<nomic-embed-text 768d>",
-  "payload": {
-    "job_id":      "...",
-    "customer":    "Acme",
-    "project":     "Q1Review",
-    "date":        "2026-03-18",
-    "chunk_index": 0,
-    "speaker":     "Luigi Ria",
-    "text":        "chunk testo..."
-  }
-}
-```
-
----
-
-## Use case completo: da audio a minuta
-
-### Fase 1 — Upload e trascrizione
-
-1. L'utente apre `http://localhost:8081`, trascina il file audio nella Web UI
-2. Compila: **Cliente**, **Progetto**, **Lingua**, **Max Speaker**, **Formato output**, toggle **Diarizzazione**
-3. Clicca **Trascrivi** — il form invia `POST` a n8n webhook, che forwarda a `whisperx_api`
-4. `whisperx_api` salva il file audio in `data/uploads/in/{job_id}/` e accoda il `job_id` su `wx:queue`
-5. `sse_broker` riporta in tempo reale l'aggiornamento al browser via SSE
-6. `whisperx_worker` prende il job dalla coda:
-   - ffmpeg converte l'audio in WAV 16kHz mono
-   - faster-whisper trascrive con word timestamps
-   - pyannote esegue la diarizzazione (se abilitata)
-   - merge assegna `SPEAKER_XX` a ogni segmento
-   - Carica `result.json`, `result.txt` e l'audio originale su MinIO
-   - Accoda il `job_id` su `rag:queue`
-7. `rag_indexer` chunka la trascrizione, crea embedding con nomic-embed-text e fa upsert su Qdrant
-
-### Fase 2 — Associazione speaker
-
-1. L'utente clicca **Associa Speaker** nella Web UI → `speakers.html?job_id=...`
-2. La pagina chiama `GET /jobs/{id}/speakers` su `transcriber_api` (porta 9500):
-   - Scarica `result.json` da MinIO e estrae la lista degli speaker unici
-   - Legge gli alias già salvati in `speaker_aliases` (se presenti)
-   - Recupera suggerimenti da job precedenti dello stesso cliente
-3. L'utente inserisce nome e azienda per ogni `SPEAKER_XX`
-4. Clicca **Salva** → `POST /jobs/{id}/speakers` salva in `speaker_aliases` su PG e setta `speakers_mapped=true`
-
-### Fase 3 — Generazione minuta
-
-1. L'utente clicca **Genera Minuta** → `minutes.html?job_id=...`
-2. Sceglie:
-   - **Template**: tipo di documento (Verbale Standard, Minuta Dettagliata, 1:1)
-   - **Modello LLM**: quale modello Ollama usare
-   - **Contesto RAG**: quanto contesto storico includere
-3. Clicca **Genera** → `POST /minutes/jobs` su `minutes_api` (porta 9600)
-4. `minutes_worker` prende il job da `minutes:queue`:
-   - Scarica `result.json` da MinIO (con `_parse_minio_url` che gestisce gli URL pubblici)
-   - Legge gli alias da `speaker_aliases` in PG (sorgente di verità prioritaria)
-   - Sostituisce `SPEAKER_XX` con i nomi reali nella trascrizione
-   - Se `context_level != standalone`: fa retrieval su Qdrant con filtro per cliente/progetto/speaker
-   - Carica il template `.txt`, sostituisce le variabili
-   - Chiama Ollama in streaming, aggiorna Redis ogni 100 token
-   - Carica la minuta `.md` sul bucket `minutes` di MinIO
-   - Aggiorna Redis e PG con `status=COMPLETED` e l'URL della minuta
-5. La Web UI mostra la minuta in anteprima Markdown formattata
-
----
-
-## API Reference
-
-### WhisperX API — `http://localhost:9200`
-
-#### `POST /jobs` — Invia un job di trascrizione
+Verificare gli altri servizi:
 
 ```bash
-curl -X POST http://localhost:9200/jobs \
-  -F "file=@meeting.mp3" \
-  -F "customer=Acme" \
-  -F "project=Q1Review" \
-  -F "language=it" \
-  -F "diarize=true" \
-  -F "output_format=both" \
-  -F "max_speakers=6"
-```
+# Whisper API
+curl http://localhost:9200/health
 
-| Parametro | Tipo | Default | Descrizione |
-|---|---|---|---|
-| `file` | File | richiesto | File audio (mp3, m4a, wav, mp4, …) |
-| `customer` | str | richiesto | Nome cliente — usato come namespace MinIO |
-| `project` | str | richiesto | Nome progetto — usato come namespace MinIO |
-| `language` | str | `it` | Codice lingua: `it`, `en`, `auto` |
-| `max_speakers` | int | `8` | Max speaker (1–20) |
-| `diarize` | bool | `true` | Abilita diarizzazione |
-| `output_format` | str | `both` | `json` \| `txt` \| `both` |
-| `participants` | str | `""` | Lista partecipanti (riservato) |
-
-Risposta `202`:
-```json
-{
-  "job_id": "d87b69740f634fd28ad1d5dda935e963",
-  "status": "PENDING",
-  "customer": "Acme",
-  "project": "Q1Review",
-  "output_format": "both"
-}
-```
-
-#### `GET /jobs/{job_id}` — Polling stato
-
-```bash
-curl http://localhost:9200/jobs/d87b6974...
-```
-
-Risposta durante elaborazione:
-```json
-{ "status": "WORKING", "step": "DIARIZING_EMBEDDINGS_42pct" }
-```
-
-Risposta completato:
-```json
-{
-  "status": "COMPLETED",
-  "output_json_url": "http://localhost:9000/wx-transcriptions/Acme/Q1Review/20260318_153045_d87b6974/result.json",
-  "output_txt_url":  "http://localhost:9000/wx-transcriptions/Acme/Q1Review/20260318_153045_d87b6974/result.txt",
-  "audio_url":       "http://localhost:9000/wx-transcriptions/Acme/Q1Review/20260318_153045_d87b6974/audio_original.mp3",
-  "output_format": "both",
-  "finished_at": "2026-03-18T15:30:45Z"
-}
-```
-
-#### `POST /jobs/{job_id}/pause` — Sospendi
-
-```bash
-curl -X POST http://localhost:9200/jobs/d87b6974.../pause
-```
-
-Risposta:
-```json
-{ "job_id": "...", "stop_requested": true, "current_status": "WORKING" }
-```
-
-#### `POST /jobs/{job_id}/resume` — Riprendi
-
-```bash
-curl -X POST http://localhost:9200/jobs/d87b6974.../resume
-```
-
-Risposta 200: `{ "job_id": "...", "status": "PENDING", "step": "RESUMED" }`
-
-Risposta 410 (audio rimosso): `{ "error": "audio_missing", "detail": "..." }`
-
-#### `POST /jobs/{job_id}/retry` — Riprova job FAILED
-
-```bash
-curl -X POST http://localhost:9200/jobs/d87b6974.../retry
-```
-
-#### `DELETE /jobs/{job_id}?scope=` — Elimina risorse
-
-```bash
-# Elimina solo l'audio
-curl -X DELETE "http://localhost:9200/jobs/d87b6974...?scope=audio"
-
-# Elimina audio + trascrizione (soft delete)
-curl -X DELETE "http://localhost:9200/jobs/d87b6974...?scope=transcript"
-
-# Elimina tutto incluso RAG → status=DELETED
-curl -X DELETE "http://localhost:9200/jobs/d87b6974...?scope=rag"
-
-# Rimuove ogni traccia (solo su job già DELETED)
-curl -X DELETE "http://localhost:9200/jobs/d87b6974...?scope=purge"
-```
-
-Risposta:
-```json
-{
-  "job_id": "...",
-  "scope": "rag",
-  "ops": [
-    "MinIO deleted: wx-transcriptions/Acme/...",
-    "Qdrant deleted points for job_id=...",
-    "PG deleted: speaker_aliases, minutes_jobs, rag_index_jobs",
-    "status → DELETED"
-  ]
-}
-```
-
-#### `GET /queue-stats` — Snapshot coda
-
-```bash
-curl http://localhost:9200/queue-stats
-```
-
-```json
-{
-  "queue_length": 1,
-  "queued_ids": ["abc123"],
-  "status_counts": { "PENDING": 1, "WORKING": 0, "COMPLETED": 5, "FAILED": 0 },
-  "stale_working": []
-}
-```
-
----
-
-### Transcriber API — `http://localhost:9500`
-
-#### `GET /jobs/{job_id}/speakers` — Speaker rilevati + alias
-
-```bash
-curl http://localhost:9500/jobs/d87b6974.../speakers
-```
-
-```json
-{
-  "job_id": "...",
-  "customer": "Acme",
-  "project": "Q1Review",
-  "speakers": [
-    {
-      "speaker_id": "SPEAKER_00",
-      "segments": 42,
-      "duration_sec": 185.3,
-      "mapped": true,
-      "name": "Luigi Ria",
-      "company": "Kiratech"
-    }
-  ],
-  "suggestions": [
-    { "speaker_id": "SPEAKER_00", "name": "Luigi Ria", "company": "Kiratech", "last_used": "2026-03-10T..." }
-  ],
-  "speakers_mapped": true
-}
-```
-
-#### `POST /jobs/{job_id}/speakers` — Salva mapping speaker
-
-```bash
-curl -X POST http://localhost:9500/jobs/d87b6974.../speakers \
-  -H "Content-Type: application/json" \
-  -d '{
-    "aliases": [
-      { "speaker_id": "SPEAKER_00", "name": "Luigi Ria", "company": "Kiratech" },
-      { "speaker_id": "SPEAKER_01", "name": "Mario Rossi", "company": "Acme" }
-    ]
-  }'
-```
-
-```json
-{ "ok": true, "job_id": "...", "aliases_saved": 2 }
-```
-
-#### `GET /jobs/{job_id}/transcript-url` — URL pubblico trascrizione
-
-```bash
-curl http://localhost:9500/jobs/d87b6974.../transcript-url
-```
-
-```json
-{ "job_id": "...", "url": "http://localhost:9000/wx-transcriptions/Acme/.../result.json" }
-```
-
----
-
-### Minutes API — `http://localhost:9600`
-
-#### `POST /minutes/jobs` — Crea job generazione minuta
-
-```bash
-curl -X POST http://localhost:9600/minutes/jobs \
-  -F "job_id=d87b6974..." \
-  -F "template=standard" \
-  -F "context_level=customer_project" \
-  -F "model=mistral:7b" \
-  -F "participants=[]"
-```
-
-| Parametro | Tipo | Default | Descrizione |
-|---|---|---|---|
-| `job_id` | str | richiesto | ID del job di trascrizione |
-| `template` | str | `standard` | Chiave del file template |
-| `context_level` | str | `standalone` | `standalone` \| `customer` \| `customer_project` \| `speakers` |
-| `model` | str | richiesto | Nome modello Ollama |
-| `participants` | str | `[]` | JSON array (il worker usa PG come sorgente primaria) |
-
-Risposta `202`:
-```json
-{
-  "minutes_id": "ac1f6432c600462ea9afa45c26efb940",
-  "status": "PENDING",
-  "customer": "Acme",
-  "project": "Q1Review",
-  "template": "standard",
-  "context_level": "customer_project",
-  "model": "mistral:7b"
-}
-```
-
-Risposta `409` (job già attivo per lo stesso template):
-```json
-{
-  "detail": {
-    "error": "duplicate_active",
-    "minutes_id": "...",
-    "message": "Esiste già un job attivo per template 'standard'"
-  }
-}
-```
-
-#### `GET /minutes/jobs/{minutes_id}` — Polling stato
-
-```bash
-curl http://localhost:9600/minutes/jobs/ac1f6432...
-```
-
-```json
-{
-  "minutes_id": "ac1f6432...",
-  "job_id": "d87b6974...",
-  "status": "COMPLETED",
-  "step": "DONE",
-  "template": "standard",
-  "context_level": "customer_project",
-  "model": "mistral:7b",
-  "output_url": "http://localhost:9000/minutes/Acme/Q1Review/2026-03-18_d87b6974/Acme - Q1Review - 2026-03-18.md",
-  "preview": "# Verbale Riunione\n\n## ...",
-  "finished_at": "2026-03-18T16:00:00Z"
-}
-```
-
-#### `GET /minutes/jobs` — Lista minute
-
-```bash
-# Tutte le minute di un job
-curl "http://localhost:9600/minutes/jobs?job_id=d87b6974..."
-
-# Tutte le minute di un cliente
-curl "http://localhost:9600/minutes/jobs?customer=Acme&limit=20"
-```
-
-#### `DELETE /minutes/jobs/{minutes_id}` — Elimina job minuta
-
-```bash
-curl -X DELETE http://localhost:9600/minutes/jobs/ac1f6432...
-```
-
-```json
-{ "minutes_id": "ac1f6432...", "deleted": true }
-```
-
-#### `GET /minutes/templates` — Template disponibili
-
-```bash
-curl http://localhost:9600/minutes/templates
-```
-
-```json
-{
-  "templates": {
-    "standard": {
-      "key": "standard",
-      "name": "Verbale Standard",
-      "tags": ["verbale", "formale", "decisioni", "azioni"],
-      "description": "Verbale formale con sezioni fisse: oggetto, punti discussi, decisioni, azioni, prossimi passi"
-    }
-  }
-}
-```
-
-#### `GET /minutes/models` — Modelli Ollama
-
-```bash
-curl http://localhost:9600/minutes/models
-```
-
-```json
-{
-  "installed": [
-    { "name": "mistral:7b", "size_gb": 4.1 }
-  ],
-  "suggested": [
-    { "name": "mistral:7b", "description": "Buon equilibrio qualità/velocità" }
-  ]
-}
-```
-
-#### `POST /minutes/models/pull` — Scarica modello
-
-```bash
-curl -X POST http://localhost:9600/minutes/models/pull \
-  -H "Content-Type: application/json" \
-  -d '{"model": "llama3.2:3b"}'
-```
-
-```json
-{ "status": "pulling", "model": "llama3.2:3b" }
-```
-
----
-
-### SSE Broker — `http://localhost:9400`
-
-#### `GET /jobs` — Snapshot tutti i job
-
-```bash
+# SSE Broker
 curl http://localhost:9400/jobs
+
+# Minutes API
+curl http://localhost:9600/health
 ```
-
-#### `GET /events?all=1` — Stream in tempo reale (tutti i job)
-
-```javascript
-const es = new EventSource('http://localhost:9400/events?all=1');
-es.addEventListener('job_update', e => {
-  const job = JSON.parse(e.data);
-  console.log(job.job_id, job.status, job.step);
-});
-```
-
-#### `GET /events?jobs=id1,id2` — Stream filtrato per job_id
 
 ---
 
-## Gestione delle minute
+## Moduli funzionali e mapping Docker
 
-### Template
+Il sistema è composto da **tre aree funzionali** — Trascrizione, Archiviazione, Generazione Minuta — più infrastruttura di supporto.
 
-I template sono file `.txt` in `./minutes/templates/`. Aggiungere un template = creare un file, zero codice.
+### Area 1 — Trascrizione audio
 
-**Formato:**
-```
-Title: Nome del template
-Tags: tag1, tag2, tag3
-Description: Descrizione visualizzata nel tooltip della UI
----
-<testo del prompt con variabili {{ var }}>
-```
+| Modulo funzionale | Container Docker | Porta | Ruolo |
+|---|---|---|---|
+| **API Trascrizione** | `n8n_whisperx_api` | `9200` | Riceve upload audio, crea job su Redis, espone polling stato |
+| **Worker Trascrizione** | `n8n_whisperx_worker` | — | Esegue faster-whisper + pyannote, produce JSON/TXT, carica su MinIO |
+| **Cleanup Worker** | `n8n_whisperx_cleanup` | — | Cancella file temporanei su disco ogni ora (non tocca MinIO) |
 
-**Variabili disponibili nel prompt:**
-```
-{{ customer }}        — nome cliente
-{{ project }}         — nome progetto
-{{ date }}            — data della riunione (YYYY-MM-DD)
-{{ participants }}    — lista partecipanti (nome + azienda)
-{{ duration }}        — durata stimata
-{{ transcript }}      — trascrizione annotata con speaker
-{{ rag_context }}     — contesto RAG da riunioni precedenti (vuoto se standalone)
-{{ rag_chunks_used }} — numero di chunk RAG utilizzati
-```
+Il worker carica i modelli **una sola volta** all'avvio e rimane in ascolto sulla coda Redis. Questo evita reload costosi a ogni job.
 
-**Blocchi condizionali:**
-```
-{% if rag_context %}
-## Contesto da riunioni precedenti
-{{ rag_context }}
-{% endif %}
-```
-
-I template sono ricaricati al riavvio di `minutes_api` e `minutes_worker`. Per ricaricarli senza restart:
-
-```bash
-docker restart n8n_minutes_api n8n_minutes_worker
-```
-
-### Livelli di contesto RAG
-
-| Livello | Descrizione | Filtro Qdrant |
-|---|---|---|
-| `standalone` | Nessun contesto storico | Nessuno — solo la trascrizione corrente |
-| `customer` | Tutte le riunioni dello stesso cliente | `customer == "Acme"` |
-| `customer_project` | Riunioni precedenti dello stesso progetto | `customer == "Acme" AND project == "Q1Review"` |
-| `speakers` | Interventi storici degli stessi partecipanti | `speaker IN [nomi mappati]` |
-
-Il job corrente è sempre escluso dal retrieval (`must_not: job_id`).
-
-### Flusso speaker → minuta
+Pipeline di elaborazione per ogni job:
 
 ```
-speaker_aliases (PG)          ← sorgente di verità
+ffmpeg → WAV 16kHz mono
+  └→ faster-whisper → trascrizione con timestamp per parola
+      └→ pyannote → diarizzazione parlanti (opzionale)
+          └→ merge → assegnazione speaker a ogni segmento
+              └→ MinIO → upload result.json e/o result.txt
+```
+
+### Area 2 — Gestione trascrizioni e speaker
+
+| Modulo funzionale | Container Docker | Porta | Ruolo |
+|---|---|---|---|
+| **Transcriber API** | `n8n_transcriber_api` | `9500` | Lettura trascrizioni da MinIO, rename speaker, gestione alias |
+
+Questo servizio (ex `minutes_api`) si occupa di tutto ciò che riguarda la trascrizione già prodotta: leggere il testo, rinominare i parlanti, memorizzare gli alias speaker su PostgreSQL.
+
+### Area 3 — Generazione verbale (AI)
+
+| Modulo funzionale | Container Docker | Porta | Ruolo |
+|---|---|---|---|
+| **Minutes API** | `n8n_minutes_api` | `9600` | Crea job di generazione verbale, espone stato |
+| **Minutes Worker** | `n8n_minutes_worker` | — | RAG su Qdrant + prompt Ollama + upload minuta su MinIO |
+| **RAG Indexer** | `n8n_rag_indexer` | — | Chunking + embedding + upsert su Qdrant al termine di ogni trascrizione |
+
+### Infrastruttura di supporto
+
+| Servizio | Container Docker | Porta | Ruolo |
+|---|---|---|---|
+| **Web UI** | `n8n_stack_webform` | `8081` | Interfaccia utente (nginx che serve HTML/CSS/JS statici) |
+| **SSE Broker** | `n8n_sse_broker` | `9400` | Polling Redis ogni 2s → push aggiornamenti al browser via Server-Sent Events |
+| **n8n** | `n8n_stack` | `5678` | Orchestrazione workflow (ingestion webhook, automazioni) |
+| **PostgreSQL** | `n8n_stack_postgres` | — | Metadata job, alias speaker, storico minute |
+| **Redis** | `n8n_stack_redis` | — | Code FIFO (`wx:queue`, `minutes:queue`, `rag:queue`) e stato job |
+| **MinIO** | `n8n_stack_minio` | `9000`/`9001` | Archiviazione file (audio, trascrizioni JSON/TXT, minute) |
+| **Qdrant** | `n8n_stack_qdrant` | `6333` | Vector store per RAG sulle trascrizioni |
+| **Ollama** | `n8n_stack_ollama` | `11434` | LLM locale per embedding e generazione verbale |
+
+### Mappa delle dipendenze
+
+```
+Browser (8081)
     │
-    ├── letta da minutes_worker al momento della generazione
-    ├── usata per rinominare SPEAKER_XX → nome reale nella trascrizione
-    ├── usata per costruire la lista partecipanti nel prompt
-    └── usata per il filtro RAG context_level=speakers
+    ├─[caricamento pagina]─→ SSE Broker (9400) ─→ Redis
+    │                              └─[eventi]─────→ Browser
+    │
+    ├─[upload audio]──────→ WhisperX API (9200) ─→ Redis queue
+    │                                               └─→ Worker ─→ MinIO
+    │
+    ├─[rename speaker]────→ Transcriber API (9500) ─→ PostgreSQL + MinIO
+    │
+    └─[genera minuta]─────→ Minutes API (9600) ─→ Redis queue
+                                                    └─→ Worker ─→ Qdrant + Ollama ─→ MinIO
 ```
-
-**Priorità nel worker:**
-1. `speaker_aliases` da PG (sempre letto) → usato se presente
-2. `participants` da Redis (passato dalla UI) → fallback se PG è vuoto
-3. Nessun mapping → log warning, usa `SPEAKER_XX` nel prompt
 
 ---
 
-## Gestione storico e controlli
+## Guida alle pagine web
 
-### Stati di un job
+L'interfaccia è accessibile su **[http://localhost:8081](http://localhost:8081)** ed è composta da tre sezioni principali.
+
+---
+
+### Pagina Trascrizione
+
+**URL:** `http://localhost:8081` (pagina principale)
+
+La pagina è divisa in due colonne:
+
+#### Colonna sinistra — Nuova Trascrizione
+
+Permette di avviare un nuovo job di trascrizione compilando un form:
+
+| Campo | Tipo | Descrizione |
+|---|---|---|
+| **File audio** | Drag & drop / click | Formati supportati: mp3, m4a, wav, mp4, ogg, flac |
+| **Cliente** | Testo libero | Usato come namespace nel path MinIO (`cliente/progetto/...`) |
+| **Progetto** | Testo libero | Secondo livello del path MinIO |
+| **Lingua** | Selettore | `it` (italiano), `en` (inglese), `auto` (rilevamento automatico) |
+| **Numero massimo di parlanti** | Numero (1–20) | Limita il numero di speaker che pyannote cerca |
+| **Diarizzazione** | Toggle | Abilita/disabilita l'identificazione dei parlanti |
+| **Formato output** | Radio | `JSON`, `TXT`, oppure `entrambi` |
+
+Dopo aver cliccato **Avvia Trascrizione**, il file viene inviato all'API WhisperX (`POST /jobs`) e il job entra in coda Redis.
+
+#### Colonna destra — Stato Trascrizioni
+
+**Trascrizione Corrente** — per il job attivo:
+- Barra di avanzamento con percentuale
+- Passi animati della pipeline (`CONVERTING`, `TRANSCRIBING`, `DIARIZING_EMBEDDINGS_42pct`, ecc.)
+- Pulsante **Sospendi** — mette il job in stato `PAUSED`; il file audio viene conservato su disco per consentire la ripresa
+- Pulsante **Elimina** — scoping a scelta (audio / trascrizione / rag / purge)
+
+**Storico Trascrizioni** — accordion con tutti i job precedenti:
+- Badge di stato colorati (`COMPLETED`, `FAILED`, `PAUSED`, `DELETED`)
+- Link diretti ai file su MinIO per download
+- Azioni inline: **Associa Speaker**, **Genera Minuta**, **Riprova**, **Elimina**
+
+Gli aggiornamenti arrivano in tempo reale tramite **SSE** (Server-Sent Events): il browser apre una connessione persistente verso `http://localhost:9400/events?all=1` e riceve eventi `job_update` ogni volta che Redis cambia stato.
+
+---
+
+### Pagina Associazione Speaker
+
+**URL:** `http://localhost:8081/speakers.html` (accessibile anche dal pulsante "Associa Speaker" nello storico)
+
+Questa pagina consente di sostituire le etichette anonime generate da pyannote (`SPEAKER_00`, `SPEAKER_01`, ...) con i nomi reali dei partecipanti alla riunione.
+
+#### Flusso operativo
+
+1. **Caricamento della trascrizione** — La pagina interroga la Transcriber API (`GET /transcriptions/{job_id}`) per recuperare il JSON della trascrizione da MinIO.
+
+2. **Visualizzazione dei segmenti** — I segmenti della trascrizione sono mostrati raggruppati per speaker. Accanto a ogni etichetta (`SPEAKER_00`) compare un campo di testo.
+
+3. **Ascolto dei segmenti** — Per ogni speaker è disponibile un pulsante play che riproduce l'audio del primo segmento, aiutando a identificare la voce.
+
+4. **Compilazione dei nomi** — L'utente inserisce il nome reale accanto a ogni `SPEAKER_XX`.
+
+5. **Salvataggio** — Il click su **Salva Associazioni** invia i mapping alla Transcriber API (`POST /transcriptions/{job_id}/speakers`), che:
+   - Aggiorna `speaker_aliases` su PostgreSQL
+   - Rigenera il file TXT su MinIO con i nomi reali al posto delle etichette
+   - Aggiorna il JSON con il campo `speaker_name` per ogni segmento
+
+#### Dove vengono salvati i dati
+
+Gli alias speaker vengono persistiti nella tabella `speaker_aliases` di PostgreSQL, collegata al `job_id`. Sono disponibili in tutti i passi successivi (generazione minuta, esportazione).
+
+---
+
+### Pagina Generazione Minuta
+
+**URL:** `http://localhost:8081/minutes.html` (accessibile anche dal pulsante "Genera Minuta" nello storico)
+
+Questa pagina avvia la generazione di un verbale strutturato usando il LLM locale (Ollama) con recupero contestuale dal vector store (RAG su Qdrant).
+
+#### Flusso operativo
+
+1. **Selezione del template** — Un menu a tendina mostra i template disponibili nella directory `minutes/templates/`. Ogni template definisce la struttura e il tono del verbale (vedi [Installare nuovi template](#installare-nuovi-template)).
+
+2. **Selezione del modello LLM** — La pagina recupera l'elenco dei modelli installati in Ollama (`GET http://localhost:11434/api/tags`) e propone una lista di scelta.
+
+3. **Parametri opzionali** — È possibile aggiungere note contestuali (es. obiettivi della riunione, decisioni pregresse) che verranno iniettate nel prompt.
+
+4. **Avvio generazione** — Il click su **Genera Minuta** invia una richiesta alla Minutes API (`POST /minutes`) che:
+   - Crea un job nella coda Redis `minutes:queue`
+   - Restituisce un `minutes_job_id`
+
+5. **Monitoraggio** — Un indicatore di avanzamento mostra lo stato. Il Minutes Worker esegue in sequenza:
+   - **RAG retrieval** — recupera da Qdrant i chunk più rilevanti della trascrizione usando `nomic-embed-text`
+   - **Prompt assembly** — costruisce il prompt finale combinando template + contesto RAG + alias speaker + note
+   - **Generazione LLM** — invia il prompt a Ollama in streaming
+   - **Upload** — salva la minuta generata su MinIO nel bucket `minutes`
+
+6. **Risultato** — Al completamento, la pagina mostra la minuta in un'area di testo con opzione di copia e download (formato `.md` o `.txt` a seconda del template).
+
+---
+
+## Installare nuovi template
+
+I template definiscono la struttura del verbale generato dal LLM. Si trovano nella directory:
 
 ```
-PENDING   → in attesa nella coda wx:queue
-WORKING   → worker in elaborazione
-COMPLETED → trascrizione completata, file su MinIO
-FAILED    → errore — consultare step e error_message
-PAUSED    → sospeso (stop_requested=1) — file audio preservato su disco
-DELETED   → soft delete — metadata intatti, file eliminati
+ghost-in-the-meeting/
+└── minutes/
+    └── templates/
+        ├── standard.md
+        ├── executive_summary.md
+        └── (altri template)
 ```
 
-### Operazioni di eliminazione
+### Struttura di un template
 
-Il DELETE su `wx_api` supporta 4 scope progressivi. Ogni scope include quelli precedenti:
+Un template è un file di testo (Markdown o plain text) con **placeholder** in formato Jinja2 che il Minutes Worker sostituisce prima di inviare il prompt a Ollama.
 
+Esempio di template `minutes/templates/standard.md`:
+
+```markdown
+# Verbale di Riunione
+
+**Data:** {{ date }}
+**Cliente:** {{ customer }}
+**Progetto:** {{ project }}
+**Partecipanti:** {{ participants }}
+**Durata:** {{ duration }}
+
+---
+
+## Contesto recuperato dalla trascrizione
+
+{{ rag_context }}
+
+---
+
+## Istruzioni per il modello
+
+Sei un assistente specializzato nella redazione di verbali aziendali.
+Basandoti sul contesto della trascrizione fornito sopra, genera un verbale strutturato che includa:
+
+1. **Sommario** — breve descrizione degli argomenti trattati
+2. **Punti discussi** — elenco degli argomenti affrontati con relativi dettagli
+3. **Decisioni prese** — elenco delle decisioni formali
+4. **Azioni da intraprendere** — lista di task con responsabile e scadenza, se disponibile
+5. **Note aggiuntive** — tutto ciò che non rientra nelle categorie precedenti
+
+Usa un tono {{ tone }} e scrivi in {{ language }}.
 ```
-audio      → MinIO audio_url + data/in/{job_id}/
-transcript → audio + MinIO result.json + result.txt + data/out/{job_id}/
-rag        → transcript + Qdrant points + speaker_aliases + minutes_jobs
-             + rag_index_jobs + file .md dal bucket minutes
-             → status = DELETED (riga PG intatta)
-purge      → (solo su DELETED) Redis key + DELETE FROM wx_transcription_jobs (cascade)
-```
 
-### Recovery automatico
+### Placeholder disponibili
 
-Al riavvio del worker, `recover_stale_jobs()` ri-accoda:
-- Job in `PENDING` con file audio ancora su disco
-- Job in `WORKING` da più di 45 minuti (stale: worker crashato)
+| Placeholder | Descrizione |
+|---|---|
+| `{{ date }}` | Data della riunione (dal metadata del job) |
+| `{{ customer }}` | Nome cliente |
+| `{{ project }}` | Nome progetto |
+| `{{ participants }}` | Elenco partecipanti (dagli alias speaker) |
+| `{{ duration }}` | Durata audio trascritta |
+| `{{ rag_context }}` | Chunk di trascrizione recuperati da Qdrant (iniettato automaticamente dal worker) |
+| `{{ language }}` | Lingua della trascrizione (`italiano`, `inglese`) |
+| `{{ tone }}` | Tono richiesto (campo configurabile dall'utente nella UI) |
+| `{{ notes }}` | Note aggiuntive inserite dall'utente nella pagina Minuta |
 
-I job `PAUSED` non vengono mai ri-accodati automaticamente.
+### Creare un nuovo template
 
-### Cleanup automatico
-
-`whisperx_cleanup` gira ogni ora e rimuove `data/in/{job_id}/` e `data/out/{job_id}/` per i job in stato `COMPLETED` o `FAILED` (mai i `PAUSED`).
-
-Configurabile via env:
-- `WX_CLEANUP_INTERVAL_SEC` — intervallo tra i cicli (default: 3600)
-- `WX_CLEANUP_MIN_AGE_SEC` — età minima del job prima di pulire (default: 300)
-
-### Comandi utili
+1. Creare un nuovo file `.md` nella directory `minutes/templates/`:
 
 ```bash
-# Log in tempo reale del worker
+cp minutes/templates/standard.md minutes/templates/mio_template.md
+```
+
+2. Modificare il contenuto adattando le istruzioni al caso d'uso (es. template per board meeting, per review tecnica, per kickoff di progetto).
+
+3. **Non è necessario riavviare Docker**: i template sono montati come volume read-only nel container (`./minutes/templates:/app/templates:ro`). Al successivo accesso alla pagina Minuta, il nuovo template apparirà automaticamente nel menu a tendina.
+
+4. Verificare che il file sia riconosciuto:
+
+```bash
+docker exec n8n_minutes_api ls /app/templates
+```
+
+### Regole per i template
+
+- Il nome del file (senza estensione) diventa l'etichetta nel menu a tendina della UI, con underscore trasformati in spazi (`executive_summary` → `executive summary`)
+- Il template deve contenere almeno il placeholder `{{ rag_context }}`, altrimenti il contesto RAG non verrà incluso nel prompt
+- È possibile usare tutta la sintassi Jinja2 (condizioni `{% if %}`, cicli `{% for %}`, filtri come `{{ participants | join(', ') }}`)
+- La lunghezza del template incide sul numero di token inviati a Ollama: template molto lunghi possono superare la context window dei modelli più piccoli
+
+---
+
+## Installare nuovi modelli con Ollama
+
+Il sistema usa Ollama per due funzioni distinte:
+
+| Funzione | Modello default | Variabile env |
+|---|---|---|
+| **Embedding** (RAG) | `nomic-embed-text` | `EMBED_MODEL` in `minutes_worker` / `rag_indexer` |
+| **Generazione verbale** | scelto dall'utente nella UI | configurato al momento della richiesta |
+
+### Installare un nuovo modello LLM
+
+```bash
+# Elenco modelli consigliati per diversi scenari
+docker exec -it n8n_stack_ollama ollama pull mistral          # 7B, veloce su CPU, ottimo per italiano
+docker exec -it n8n_stack_ollama ollama pull llama3.2         # Meta LLaMA 3.2, eccellente qualità
+docker exec -it n8n_stack_ollama ollama pull gemma3:12b       # Google Gemma 3, buona comprensione contesto
+docker exec -it n8n_stack_ollama ollama pull phi4             # Microsoft Phi-4, leggero e preciso
+docker exec -it n8n_stack_ollama ollama pull qwen2.5:7b       # Qwen 2.5, ottimo per italiano/cinese
+```
+
+Una volta completato il download, il modello appare automaticamente nel menu a tendina della pagina Generazione Minuta (la UI interroga `GET http://localhost:11434/api/tags` a ogni apertura).
+
+### Verificare i modelli installati
+
+```bash
+docker exec -it n8n_stack_ollama ollama list
+```
+
+### Rimuovere un modello
+
+```bash
+docker exec -it n8n_stack_ollama ollama rm nome_modello
+```
+
+### Cambiare il modello di embedding
+
+Il modello di embedding è usato da due worker (`rag_indexer` e `minutes_worker`) e deve essere lo stesso per entrambi, pena incompatibilità tra i vettori in Qdrant.
+
+1. Installare il nuovo modello:
+
+```bash
+docker exec -it n8n_stack_ollama ollama pull mxbai-embed-large
+```
+
+2. Aggiornare `docker-compose.yml` per entrambi i servizi:
+
+```yaml
+# rag_indexer e minutes_worker — modificare entrambi
+environment:
+  - EMBED_MODEL=mxbai-embed-large
+  - EMBED_DIM=1024  # adattare alla dimensione del nuovo modello
+```
+
+3. **Attenzione:** cambiare il modello di embedding invalida tutti i vettori già indicizzati in Qdrant. Prima di riavviare, cancellare la collection esistente:
+
+```bash
+curl -X DELETE http://localhost:6333/collections/transcriptions
+```
+
+4. Riavviare i worker:
+
+```bash
+docker compose restart rag_indexer minutes_worker
+```
+
+### Dove vengono salvati i modelli
+
+I modelli Ollama vengono salvati nel volume Docker `./ollama_data`, mappato a `/root/.ollama` all'interno del container. Sono persistenti tra i riavvii di Docker.
+
+```bash
+# Spazio occupato dai modelli
+docker exec n8n_stack_ollama du -sh /root/.ollama
+```
+
+---
+
+## Riferimento API
+
+### Servizi e porte
+
+| Servizio | URL | Credenziali |
+|---|---|---|
+| Web UI | http://localhost:8081 | — |
+| WhisperX API | http://localhost:9200 | — |
+| SSE Broker | http://localhost:9400 | — |
+| Transcriber API | http://localhost:9500 | — |
+| Minutes API | http://localhost:9600 | — |
+| n8n | http://localhost:5678 | `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` |
+| MinIO Console | http://localhost:9001 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
+| Ollama | http://localhost:11434 | — |
+| Qdrant | http://localhost:6333 | — |
+
+### Endpoint principali WhisperX API (`localhost:9200`)
+
+| Metodo | Path | Descrizione |
+|---|---|---|
+| `POST` | `/jobs` | Invia un nuovo job di trascrizione |
+| `GET` | `/jobs/{id}` | Polling stato e URL output |
+| `POST` | `/jobs/{id}/pause` | Sospende il job (audio conservato) |
+| `POST` | `/jobs/{id}/resume` | Riprende un job sospeso |
+| `POST` | `/jobs/{id}/retry` | Riprova un job fallito |
+| `DELETE` | `/jobs/{id}?scope=` | Elimina risorse (`audio`/`transcript`/`rag`/`purge`) |
+| `GET` | `/queue-stats` | Snapshot della coda Redis |
+| `GET` | `/health` | Health check |
+
+---
+
+## Comandi utili
+
+```bash
+# Log in tempo reale del worker di trascrizione
 docker logs n8n_whisperx_worker --follow
+
+# Log del worker di generazione verbale
 docker logs n8n_minutes_worker --follow
 
-# Stato della coda
+# Controllare la lunghezza delle code Redis
 docker exec n8n_stack_redis redis-cli LLEN wx:queue
 docker exec n8n_stack_redis redis-cli LLEN minutes:queue
+docker exec n8n_stack_redis redis-cli LLEN rag:queue
 
-# Ispezione di un job
+# Ispezionare un job su Redis
 docker exec n8n_stack_redis redis-cli HGETALL wx:job:JOB_ID
-docker exec n8n_stack_redis redis-cli HGETALL minutes:job:MINUTES_ID
 
-# Speaker aliases di un job
-docker exec n8n_stack_postgres psql -U n8n -d n8n -c \
-  "SELECT speaker_id, name, company FROM speaker_aliases WHERE job_id = 'JOB_ID';"
-
-# File su MinIO
+# Elencare tutti i file su MinIO
 docker exec n8n_stack_minio sh -c '
   mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD > /dev/null &&
-  mc ls --recursive local/wx-transcriptions
+  mc ls --recursive local/wx-transcriptions &&
+  mc ls --recursive local/minutes
 '
 
-# Reset completo dati di test (mantiene modelli e configurazione)
-./scripts/reset.sh
+# Reset completo (Redis + PostgreSQL + MinIO + disco)
+./reset.sh
 
-# Reset con anche Qdrant
-./scripts/reset.sh --qdrant
+# Riavviare un singolo servizio senza fermare lo stack
+docker compose restart whisperx_worker
+
+# Verificare lo spazio occupato dai dati
+du -sh data/
 ```
 
 ---
 
-## Performance (Apple M3 Pro, solo CPU)
+## Performance
+
+Misurata su Apple M3 Pro, senza GPU (Hypervisor macOS non espone GPU/Neural Engine a Docker):
 
 | Durata audio | Trascrizione | Diarizzazione | Totale |
 |---|---|---|---|
-| 72 min | ~18 min | ~35 min | ~55 min |
+| 72 minuti | ~18 min | ~35 min | ~55 min |
 
-- Modello: `small`, compute type: `int8`
+- Modello Whisper: `small`, compute type: `int8`
 - Docker Desktop: 12 CPU, 16 GB RAM
-- GPU/Neural Engine non disponibili dentro Docker su macOS (limitazione Hypervisor)
+
+Per file più brevi (< 30 minuti), il tempo totale scala circa linearmente.
 
 ---
 
 ## Roadmap
 
-- [x] Pipeline trascrizione asincrona (faster-whisper + pyannote)
-- [x] Speaker diarization con progresso real-time
-- [x] Output doppio formato (JSON + TXT)
-- [x] Job queue con stale recovery
+- [x] Pipeline di trascrizione asincrona (faster-whisper + pyannote)
+- [x] Diarizzazione parlanti con progresso in tempo reale
+- [x] Doppio formato output (JSON + TXT)
+- [x] Coda job con recovery da stale
 - [x] Cleanup worker per file temporanei
-- [x] MinIO folder naming human-readable
-- [x] SSE broker per aggiornamenti real-time al browser
-- [x] Web UI con stato live e pipeline steps
-- [x] Pause / Resume job
-- [x] Delete risorse job (4 scope: audio / transcript / rag / purge)
-- [x] DELETED status — soft delete con metadata retention
-- [x] Speaker rename (SPEAKER_XX → nome reale)
-- [x] RAG indexing delle trascrizioni su Qdrant
-- [x] Generazione minuta via Ollama (template system)
-- [x] Contesto RAG multi-livello (standalone / customer / project / speakers)
-- [x] Storico trascrizioni con viewer integrato
-- [x] Conferma eliminazione inline nel modale storia 
-- [ ] n8n workflow per automazione end-to-end
-- [ ] Integrazione delle notifiche del broker SSE verso browser
-- [ ] Export minuta in formato DOCX/PDF
+- [x] Path MinIO leggibili (`cliente/progetto/data_id/`)
+- [x] SSE broker per aggiornamenti browser in tempo reale
+- [x] Web UI con stato job live e passi pipeline
+- [x] Pausa / Ripresa job
+- [x] Eliminazione risorse job (4 scope: audio / transcript / rag / purge)
+- [x] Stato DELETED — soft delete con retention metadata
+- [x] Rename speaker (alias partecipanti → `SPEAKER_00`)
+- [x] Indicizzazione RAG trascrizioni su Qdrant
+- [x] Generazione verbale via Ollama
+- [ ] Esportazione verbale in DOCX
+- [ ] Workflow n8n end-to-end con notifica email
+- [ ] Supporto GPU su Linux (CUDA)
+- [ ] UI di ricerca full-text sulle trascrizioni archiviate
+- [ ] Push Notification da browser
+
+---
+
+*Licenza MIT — contributi benvenuti.*
