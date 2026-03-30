@@ -1,6 +1,7 @@
 version: "3.8"
 
 services:
+
   postgres:
     image: postgres:15
     container_name: n8n_stack_postgres
@@ -31,7 +32,6 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - ./redis_data:/data
-
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -66,6 +66,37 @@ services:
       - "9000:9000"
       - "9001:9001"
 
+  # ── n8n init: importa i workflow al primo avvio ────────────────────────────
+  # Esegue una sola volta, poi esce. n8n principale parte dopo.
+  n8n_init:
+    image: n8nio/n8n:latest
+    container_name: n8n_stack_init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - TZ=${TZ}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+    entrypoint: >
+      sh -c "
+        echo 'Importing n8n workflows...' &&
+        for f in /workflows/*.json; do
+          echo \"Importing $$f\" &&
+          n8n import:workflow --input=$$f || echo \"Warning: failed to import $$f\";
+        done &&
+        echo 'Import complete.'
+      "
+
   n8n:
     image: n8nio/n8n:latest
     container_name: n8n_stack
@@ -77,6 +108,8 @@ services:
         condition: service_started
       qdrant:
         condition: service_started
+      n8n_init:
+        condition: service_completed_successfully
     ports:
       - "5678:5678"
     environment:
@@ -97,6 +130,33 @@ services:
       - QUEUE_BULL_REDIS_PORT=6379
     volumes:
       - ./n8n_data:/home/node/.n8n
+
+  # ── MinIO init: crea bucket e policy al primo avvio ──────────────────────
+  # Esegue una sola volta, poi esce. Tutti i servizi che usano MinIO
+  # dipendono da questo container tramite service_completed_successfully.
+  minio_init:
+    image: minio/minio:latest
+    container_name: n8n_stack_minio_init
+    restart: "no"
+    depends_on:
+      - minio
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for MinIO to be ready...' &&
+        until mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD; do
+          sleep 2;
+        done &&
+        echo 'Creating buckets...' &&
+        mc mb --ignore-existing local/wx-transcriptions &&
+        mc mb --ignore-existing local/minutes &&
+        echo 'Setting anonymous download policy...' &&
+        mc anonymous set download local/wx-transcriptions &&
+        mc anonymous set download local/minutes &&
+        echo 'MinIO init complete.'
+      "
 
   # ── WhisperX API ──────────────────────────────────────────────────────────
   # Riceve upload, crea job su Redis, espone polling.
@@ -137,7 +197,7 @@ services:
     depends_on:
       - redis
       - postgres
-      - minio
+      - minio_init
 
   # ── WhisperX Worker ───────────────────────────────────────────────────────
   # Carica faster-whisper + pyannote UNA VOLTA all'avvio.
@@ -203,6 +263,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      minio_init:
+        condition: service_completed_successfully
       whisperx_api:
         condition: service_started
 
@@ -238,7 +300,6 @@ services:
   # Legge lo stato dei job da Redis e lo pubblica come Server-Sent Events.
   # Il browser si connette qui al caricamento pagina per la lista job
   # e poi apre un EventSource per ricevere aggiornamenti in tempo reale.
-  # Zero modifiche a wx_api o wx_worker.
   sse_broker:
     build:
       context: .
@@ -248,20 +309,17 @@ services:
     environment:
       - TZ=${TZ}
       - REDIS_URL=redis://redis:6379/0
-      - SSE_POLL_INTERVAL=2.0    # secondi tra i poll Redis
-      - SSE_KEEPALIVE_SEC=15.0   # heartbeat per tenere aperta la connessione
+      - SSE_POLL_INTERVAL=2.0      # secondi tra i poll Redis
+      - SSE_KEEPALIVE_SEC=15.0     # heartbeat per tenere aperta la connessione
     volumes:
       - ./broker/sse_broker.py:/app/sse_broker.py:ro
-      
     ports:
       - "9400:8000"
     depends_on:
       - redis
 
-
   # ── Transcriber API ───────────────────────────────────────────────────────────
   # ex minutes_api — speaker rename + lettura trascrizioni da MinIO.
-  # File rinominato: minutes_api.py → transcriber_api.py
   transcriber_api:
     build:
       context: .
@@ -303,9 +361,11 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      minio_init:
+        condition: service_completed_successfully
 
   # ── Minutes API (AI) ──────────────────────────────────────────────────────────
-  # Nuovo servizio AI — crea e monitora job di generazione minuta.
+  # Crea e monitora job di generazione minuta.
   # Coda Redis: minutes:queue → consumata da minutes_worker.
   minutes_api:
     build:
@@ -389,6 +449,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      minio_init:
+        condition: service_completed_successfully
       qdrant:
         condition: service_started
       ollama:
@@ -439,11 +501,12 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      minio_init:
+        condition: service_completed_successfully
       qdrant:
         condition: service_started
       ollama:
         condition: service_started
-
 
   # ── Webform ───────────────────────────────────────────────────────────────
   webform:
@@ -455,6 +518,7 @@ services:
     volumes:
       - ./webform:/usr/share/nginx/html:ro
 
+  # ── NeMo (opzionale — attivare con: docker compose --profile nemo up) ─────
   nemo_api:
     build:
       context: .

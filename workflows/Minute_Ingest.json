@@ -1,0 +1,205 @@
+{
+  "name": "MinutesAI — Fase 1 — Ingest",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "minute/ingest",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "188872d1-49ca-4e40-a855-297401bf7ab6",
+      "name": "Webhook — Ingest",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "e1f91789-d2b7-49ea-9871-ee78a2829d1c"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Estrae i campi dal multipart e li logga\nconst body  = $json.body ?? $json;\nconst query = $json.query ?? {};\n\nconst customer      = (body.customer      ?? query.customer      ?? '').trim();\nconst project       = (body.project       ?? query.project       ?? '').trim();\nconst language      = (body.language      ?? query.language      ?? 'it').trim();\nconst max_speakers  = (body.max_speakers  ?? query.max_speakers  ?? '8').toString();\nconst diarize       = (body.diarize       ?? query.diarize       ?? 'true').toString();\nconst output_format = (body.output_format ?? query.output_format ?? 'both').trim();\nconst participants  = (body.participants  ?? query.participants  ?? '').trim();\n\nif (!customer) throw new Error('Campo obbligatorio mancante: customer');\nif (!project)  throw new Error('Campo obbligatorio mancante: project');\n\n// Trova la chiave binaria del file audio\nconst binKeys = Object.keys($binary ?? {});\nif (!binKeys.length) throw new Error('Nessun file audio trovato nel payload');\nconst binKey = binKeys[0];\n\nconsole.log(`[MinutesAI] Ingest — ${customer}/${project} — file: ${$binary[binKey].fileName}`);\n\nreturn [{\n  json: {\n    customer, project, language,\n    max_speakers, diarize, output_format, participants,\n    binKey,\n    receivedAt: new Date().toISOString()\n  },\n  binary: { [binKey]: $binary[binKey] }\n}];"
+      },
+      "id": "b21b5b0b-5dc5-4ead-a45f-f5d767ef2244",
+      "name": "Code — Parse & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://whisperx_api:8000/jobs",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "={{ $json.binKey }}"
+            },
+            {
+              "name": "customer",
+              "value": "={{ $json.customer }}"
+            },
+            {
+              "name": "project",
+              "value": "={{ $json.project }}"
+            },
+            {
+              "name": "language",
+              "value": "={{ $json.language }}"
+            },
+            {
+              "name": "max_speakers",
+              "value": "={{ $json.max_speakers }}"
+            },
+            {
+              "name": "diarize",
+              "value": "={{ $json.diarize }}"
+            },
+            {
+              "name": "output_format",
+              "value": "={{ $json.output_format }}"
+            },
+            {
+              "name": "participants",
+              "value": "={{ $json.participants }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "d0d85825-428b-4e9a-8b9f-b32b9d6ada3d",
+      "name": "HTTP — Submit to WhisperX",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// whisperx_api risponde: { job_id, status, customer, project, output_format }\nconst job_id = $json.job_id;\nif (!job_id) throw new Error('whisperx_api non ha restituito job_id: ' + JSON.stringify($json));\n\nconsole.log(`[MinutesAI] Job creato: ${job_id} — ${$json.customer}/${$json.project}`);\n\nreturn [{ json: { job_id, status: $json.status, customer: $json.customer, project: $json.project } }];"
+      },
+      "id": "081d3390-0dcc-45db-b369-2b7b2a87e79c",
+      "name": "Code — Log & Extract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, job_id: $json.job_id, status: $json.status, customer: $json.customer, project: $json.project }) }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "0894fa1c-5ecd-40f9-a542-516b021537f9",
+      "name": "Response — Job Created",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: $json.message ?? 'Errore interno' }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "71560fba-4170-4e84-b2b1-21b333d9567a",
+      "name": "Response — Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        960,
+        208
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook — Ingest": {
+      "main": [
+        [
+          {
+            "node": "Code — Parse & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Parse & Validate": {
+      "main": [
+        [
+          {
+            "node": "HTTP — Submit to WhisperX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP — Submit to WhisperX": {
+      "main": [
+        [
+          {
+            "node": "Code — Log & Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Log & Extract": {
+      "main": [
+        [
+          {
+            "node": "Response — Job Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "54d7f1f8-85f7-45b4-8892-94a7544cee68",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c6e31288b4050eaf6da816ef3f2bed49d8717267ca6d69f0adc72ae4ec2df8df"
+  },
+  "id": "5HRaOkuZjmIxAjUq",
+  "tags": [
+    {
+      "updatedAt": "2026-03-08T15:22:16.325Z",
+      "createdAt": "2026-03-08T15:22:16.325Z",
+      "id": "QXFaeki9hMTfgx17",
+      "name": "minutesai"
+    }
+  ]
+}
